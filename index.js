@@ -1,18 +1,34 @@
 const express = require("express");
 const app = express();
-require("./src/config/db");
+const connectDB = require("./src/config/db");
+
+connectDB();
 
 app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 
-app.use("/api/grading", require("./src/routes/gradingRoutes"));
-
-app.get("/", (req, res) => {
-  res.send("QC API running");
-});
-
+// routes
+const routes = require("./src/routes");
+app.use("/api", routes);
 app.listen(3000, () => {
-  console.log("Server running on http://localhost:3000");
+  console.log("Connection succes. Server running on http://localhost:3000");
 });
+
+// const express = require("express");
+// const app = express();
+// require("./src/config/db");
+
+// app.use(express.json());
+
+// app.use("/api/grading", require("./src/routes/gradingRoutes"));
+
+// app.get("/", (req, res) => {
+//   res.send("QC API running");
+// });
+
+// app.listen(3000, () => {
+//   console.log("Server running on http://localhost:3000");
+// });
 
 // const express = require("express");
 // const GradingResult = require("./models/GradingResult");

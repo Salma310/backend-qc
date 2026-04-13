@@ -7,5 +7,6 @@ router.use("/farmers", require("./farmerRoutes"));
 router.use("/lands", require("./landRoutes"));
 router.use("/grading", require("./gradingRoutes"));
 router.use("/qr", require("./qrRoutes"));
+router.use("/lots", require("./lotRoutes"));
 
 module.exports = router;
