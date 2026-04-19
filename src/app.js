@@ -18,7 +18,7 @@ app.use(express.json());
 // 🔥 API
 app.use("/api/batch", batchRoutes);
 app.use("/api/grading", gradingRoutes);
-app.use("/api/farmer", farmerRoutes);
+app.use("/api/farmers", farmerRoutes);
 app.use("/api/land", landRoutes);
 app.use("/api/user", userRoutes);
 app.use("/api/notification", notificationRoutes);

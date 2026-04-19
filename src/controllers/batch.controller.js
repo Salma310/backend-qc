@@ -1,5 +1,5 @@
 import { prisma } from "../lib/prisma.js";
-
+import { generateBatchCode } from "../utils/codeGenerator.js";
 /**
  * GET ALL BATCH
  */
@@ -55,7 +55,6 @@ export const getBatchById = async (req, res) => {
 export const createBatch = async (req, res) => {
   try {
     const {
-      lot_code,
       farmer_id,
       land_id,
       fruit_type,
@@ -66,6 +65,8 @@ export const createBatch = async (req, res) => {
       notes,
       created_by_id,
     } = req.body;
+
+    const lot_code = await generateBatchCode(land_id)
 
     const data = await prisma.batch.create({
       data: {
@@ -79,11 +80,13 @@ export const createBatch = async (req, res) => {
         treatment,
         notes,
         created_by_id,
+        // created_by_id: req.user.id,
       },
     });
 
     res.status(201).json(data);
   } catch (error) {
+      console.error("🔥 ERROR CREATE BATCH:", error);
     res.status(500).json({ message: error.message });
   }
 };

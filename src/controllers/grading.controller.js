@@ -1,4 +1,6 @@
 import { prisma } from "../lib/prisma.js";
+import { generateGradingCode } from "../utils/codeGenerator.js";
+import { nanoid } from "nanoid";
 
 /**
  * GET ALL GRADING
@@ -91,10 +93,21 @@ export const createGrading = async (req, res) => {
       graded_by_id,
     } = req.body;
 
+    // Cek batch masih OPEN
+    const batch = await prisma.batch.findUnique({
+      where: { id: batch_id }
+    })
+    if (!batch) return res.status(404).json({ error: 'Batch tidak ditemukan' })
+    if (batch.status !== 'OPEN') {
+      return res.status(400).json({ error: 'Batch sudah ditutup, tidak bisa tambah grading' })
+    }
+
     // 🔥 Generate code & QR
     const timestamp = Date.now();
-    const grading_code = `GRD-${timestamp}`;
-    const qr_token = `QR-${timestamp}`;
+    // const grading_code = `GRD-${timestamp}`;
+    const grading_code = await generateGradingCode(batch_id)
+    const qr_token = `${grading_code}-${nanoid(6)}`
+    // const qr_token = `QR-${timestamp}`;
 
     const result = await prisma.gradingResult.create({
       data: {
