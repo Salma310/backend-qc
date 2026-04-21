@@ -1,5 +1,8 @@
 import express from "express";
 import cors from "cors";
+import multer from "multer";
+import path from "path";
+import { fileURLToPath } from "url";
 
 // routes
 import batchRoutes from "./routes/batch.routes.js";
@@ -12,12 +15,22 @@ import qrRoutes from "./routes/qr.routes.js";
 
 const app = express();
 
+// Configure multer for file uploads
+const upload = multer({ dest: 'uploads/' });
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+app.use('/uploads', express.static(path.join(__dirname, '../uploads')));// Serve static files from the 'uploads' directory
+// app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+
 app.use(cors());
 app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 
 // 🔥 API
 app.use("/api/batch", batchRoutes);
-app.use("/api/grading", gradingRoutes);
+app.use("/api/gradings", gradingRoutes);
 app.use("/api/farmers", farmerRoutes);
 app.use("/api/land", landRoutes);
 app.use("/api/user", userRoutes);

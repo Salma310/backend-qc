@@ -134,33 +134,41 @@ enum BatchStatus {
 // ─────────────────────────────────────────
 // GRADING RESULT + QR (digabung)
 // ─────────────────────────────────────────
+
 model GradingResult {
   id               String        @id @default(uuid())
   batch_id         String
-  grading_code     String        @unique // human-readable ID per buah
+  grading_code     String        @unique
 
   // Hasil grading
   grade            Grade
   grading_method   GradingMethod @default(AI)
+
+  // 🔥 TAMBAHAN AI (INI DOANG YANG BARU)
+  confidence_avg   Float?
+  total_detected   Int?
+  ai_result        Json?
+  consistency      String?
+
   confidence       Float?
   defect_detected  Boolean?
-  expiry_prediction Int?         // estimasi hari hingga expired
+  expiry_prediction Int?
 
   // Skor visual
   color_score      Float?
   texture_score    Float?
   defect_score     Float?
-  size_score       Float?        // tambahan: ukuran buah
-  weight_estimate  Float?        // tambahan: estimasi berat (gram)
+  size_score       Float?
+  weight_estimate  Float?
 
   // Metadata AI
   ml_model_used    String?
   ml_model_version String?
 
   // Foto
-  image_urls       String[]      // array URL foto
+  image_urls       String[]
 
-  // QR — digabung di sini
+  // QR
   qr_token         String        @unique
   qr_url           String?
   printed_at       DateTime?
@@ -187,6 +195,48 @@ enum GradingMethod {
   AI
   MANUAL
 }
+
+// model GradingResult {
+//   id               String        @id @default(uuid())
+//   batch_id         String
+//   grading_code     String        @unique // human-readable ID per buah
+
+//   // Hasil grading
+//   grade            Grade
+//   grading_method   GradingMethod @default(AI)
+//   confidence       Float?
+//   defect_detected  Boolean?
+//   expiry_prediction Int?         // estimasi hari hingga expired
+
+//   // Skor visual
+//   color_score      Float?
+//   texture_score    Float?
+//   defect_score     Float?
+//   size_score       Float?        // tambahan: ukuran buah
+//   weight_estimate  Float?        // tambahan: estimasi berat (gram)
+
+//   // Metadata AI
+//   ml_model_used    String?
+//   ml_model_version String?
+
+//   // Foto
+//   image_urls       String[]      // array URL foto
+
+//   // QR — digabung di sini
+//   qr_token         String        @unique
+//   qr_url           String?
+//   printed_at       DateTime?
+//   qr_is_active     Boolean       @default(true)
+
+//   graded_by_id     String?
+//   createdAt        DateTime      @default(now())
+//   updatedAt        DateTime      @updatedAt
+
+//   batch      Batch          @relation(fields: [batch_id], references: [id])
+//   graded_by  User?          @relation(fields: [graded_by_id], references: [id])
+//   qr_logs    QRAccessLog[]
+//   notifications Notification[]
+// }
 
 // ─────────────────────────────────────────
 // QR ACCESS LOG
