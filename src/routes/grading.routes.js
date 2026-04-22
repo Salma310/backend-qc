@@ -9,6 +9,7 @@ import {
   createGrading,
   updateGrading,
   deleteGrading,
+  getGradingStatus,
 } from "../controllers/grading.controller.js";
 
 const router = express.Router();
@@ -51,62 +52,10 @@ router.get("/", getAllGrading);
 router.get("/qr/:qrToken", getGradingByQr);
 router.get("/:id", getGradingById);
 
+router.get('/:id/status',        getGradingStatus)
 router.post("/", gradingUpload, createGrading);
 
+router.put('/:id',               updateGrading)
+router.delete('/:id',            deleteGrading)
+
 export default router;
-// import express from "express";
-// import multer from "multer";
-// import {
-//   getAllGrading,
-//   getGradingById,
-//   getGradingByQr,
-//   createGrading,
-//   updateGrading,
-//   deleteGrading,
-// } from "../controllers/grading.controller.js";
-
-// const router = express.Router();
-
-// // Configure multer for grading uploads
-// const upload = multer({ dest: 'uploads/' });
-
-// const gradingUpload = upload.fields([
-//   { name: 'images', maxCount: 10 } // Allow up to 10 images
-// ]);
-
-// // GET /api/gradings             → semua grading
-// // GET /api/gradings?batch_id=xx → filter by batch
-// router.get("/", getAllGrading);
-
-// // ⚠️ Route spesifik HARUS di atas route param
-// router.get("/qr/:qrToken", getGradingByQr);  // kalau ada
-
-// // Baru route dengan param
-// router.get("/:id", getGradingById);
-
-// router.post("/", gradingUpload, createGrading);
-
-// export default router;
-// import express from "express";
-// import {
-//   getAllGrading,
-//   getGradingById,
-//   // getGradingByBatch,
-//   createGrading,
-//   updateGrading,
-//   deleteGrading,
-// } from "../controllers/grading.controller.js";
-
-// const router = express.Router();
-
-// router.get("/", getAllGrading);
-// // router.get("/:batchId", getGradingByBatch);
-// router.get("/:id", getGradingById);
-
-// router.post("/", createGrading);
-
-// router.put("/:id", updateGrading);
-
-// router.delete("/:id", deleteGrading);
-
-// export default router;

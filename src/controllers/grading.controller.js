@@ -3,9 +3,10 @@ import { generateGradingCode } from "../utils/codeGenerator.js";
 import { nanoid } from "nanoid";
 import fs from "fs";
 import path from "path";
-// import { nanoid } from "nanoid";
-// import prisma from "../prisma.js";
-// import { generateGradingCode } from "../utils/generateGradingCode.js";
+import FormData from 'form-data'
+import fetch    from 'node-fetch'
+
+const AI_SERVICE_URL = process.env.AI_SERVICE_URL || 'http://localhost:8000'
 
 /**
  * GET ALL GRADING
@@ -32,46 +33,226 @@ export const getAllGrading = async (req, res) => {
     res.status(500).json({ message: error.message });
   }
 };
-// export const getAllGrading = async (req, res) => {
-//   try {
-//     const { batch_id } = req.query;
 
-//     const data = await prisma.gradingResult.findMany({
-//       where: batch_id
-//         ? { batch_id }
-//         : {},
-//       include: {
-//         batch: true,
-//         graded_by: true,
-//       },
-//       orderBy: {
-//         createdAt: "desc",
-//       },
-//     });
+/**
+ * CREATE GRADING
+ */
+export const createGrading = async (req, res) => {
+  try {
+    const { batch_id, grade: manualGrade, grading_method } = req.body
+ 
+    // ── Validasi batch ────────────────────────────────────────────
+    const batch = await prisma.batch.findUnique({ where: { id: batch_id } })
+    if (!batch)
+      return res.status(404).json({ error: 'Batch tidak ditemukan' })
+    if (batch.status !== 'OPEN')
+      return res.status(400).json({ error: 'Batch sudah ditutup' })
+ 
+    // ── Rename & simpan foto ──────────────────────────────────────
+    const grading_code  = await generateGradingCode(batch_id)
+    const qr_token      = `${grading_code}-${nanoid(6)}`
+    const uploadedFiles = req.files?.images || []
+    const dateStr       = new Date().toISOString().split('T')[0].replace(/-/g, '')
+ 
+    const renamedFiles = uploadedFiles.map((file, index) => {
+      const ext     = path.extname(file.originalname)
+      const newName = `${dateStr}-${grading_code}-${index + 1}${ext}`
+      const newPath = path.join('uploads', newName)
+      fs.renameSync(file.path, newPath)
+      return `/uploads/${newName}`
+    })
+ 
+    // ── Verifikasi semua file benar-benar ada setelah rename ──────
+    // Ini mencegah race condition saat processWithAI langsung jalan
+    for (const filePath of renamedFiles) {
+      const fullPath = path.join(process.cwd(), filePath)
+      if (!fs.existsSync(fullPath)) {
+        console.error(`❌ File tidak ditemukan setelah rename: ${fullPath}`)
+        return res.status(500).json({ error: `File upload gagal: ${filePath}` })
+      }
+    }
+ 
+    // ── Tentukan mode grading ─────────────────────────────────────
+    const isAI = grading_method !== 'MANUAL'
+ 
+    // ── Buat record DB awal ───────────────────────────────────────
+    const result = await prisma.gradingResult.create({
+      data: {
+        grading_code,
+        qr_token,
+        image_urls:     renamedFiles,
+        grading_method: isAI ? 'AI' : 'MANUAL',
+        status:         isAI ? 'PROCESSING' : 'DONE',
+        grade:          isAI ? null : manualGrade,
+        batch: {
+          connect: { id: batch_id }
+        }
+      },
+    })
+ 
+    console.log(`✅ Grading record dibuat: ${grading_code} | status: ${result.status}`)
+ 
+    // ── MANUAL: langsung selesai ──────────────────────────────────
+    if (!isAI) {
+      await updateBatchSummary(batch_id, manualGrade)
+      return res.status(201).json(result)
+    }
+ 
+    // ── AI: return 202 langsung, proses background ────────────────
+    res.status(202).json({
+      message:      'Sedang diproses AI',
+      grading_id:   result.id,
+      grading_code: result.grading_code,
+      status:       'PROCESSING',
+    })
+ 
+    // Sedikit delay kecil untuk memastikan response sudah terkirim
+    // sebelum background process mulai (opsional tapi membantu di Windows)
+    setImmediate(() => {
+      processWithAI(result.id, batch_id, renamedFiles).catch(err => {
+        console.error(`❌ processWithAI unhandled error [${grading_code}]:`, err)
+      })
+    })
+ 
+  } catch (error) {
+    console.error('createGrading error:', error)
+    res.status(500).json({ message: error.message })
+  }
+}
+ 
+ 
+/**
+ * Background worker: kirim foto ke Python, update DB
+ */
+async function processWithAI(gradingId, batchId, fileUrls) {
+  console.log(`\n🤖 processWithAI START [${gradingId}]`)
+  console.log(`   Files: ${fileUrls.join(', ')}`)
+ 
+  try {
+    // ── Verifikasi file ada sebelum kirim ke Python ───────────────
+    const aiForm = new FormData()
+    for (const filePath of fileUrls) {
+      const fullPath = path.join(process.cwd(), filePath)
+ 
+      // Cek file benar-benar ada dan bisa dibaca
+      if (!fs.existsSync(fullPath)) {
+        throw new Error(`File tidak ditemukan: ${fullPath}`)
+      }
+ 
+      const stat = fs.statSync(fullPath)
+      if (stat.size === 0) {
+        throw new Error(`File kosong (0 bytes): ${fullPath}`)
+      }
+ 
+      console.log(`   📎 Append file: ${path.basename(fullPath)} (${stat.size} bytes)`)
+      aiForm.append('images', fs.createReadStream(fullPath), path.basename(fullPath))
+    }
+ 
+    console.log(`   🚀 Mengirim ${fileUrls.length} foto ke Python...`)
+ 
+    // ── Panggil Python AI service ─────────────────────────────────
+    const aiRes = await fetch(`${AI_SERVICE_URL}/grade`, {
+      method:  'POST',
+      body:    aiForm,
+      headers: aiForm.getHeaders(),
+      // Timeout 60 detik — cukup untuk proses YOLO + CNN
+      signal:  AbortSignal.timeout(60000),
+    })
+ 
+    if (!aiRes.ok) {
+      const errText = await aiRes.text()
+      throw new Error(`Python API error ${aiRes.status}: ${errText}`)
+    }
+ 
+    const aiData = await aiRes.json()
+    console.log(`   📊 Python response:`, JSON.stringify(aiData).slice(0, 200))
+ 
+    // ── Gagal dari Python → update ERROR ─────────────────────────
+    if (!aiData.success) {
+      console.warn(`   ⚠ Python: ${aiData.error_code} — ${aiData.message}`)
+      await prisma.gradingResult.update({
+        where: { id: gradingId },
+        data: {
+          status:        'ERROR',
+          ai_result:     aiData,
+          error_message: aiData.message || 'Jambu tidak terdeteksi',
+        },
+      })
+      return
+    }
+ 
+    // ── Sukses → update record ────────────────────────────────────
+    await prisma.gradingResult.update({
+      where: { id: gradingId },
+      data: {
+        status:          'DONE',
+        grade:           aiData.grade,
+        confidence:      aiData.confidence_avg,
+        confidence_avg:  aiData.confidence_avg,
+        total_detected:  aiData.total_detected,
+        consistency:     aiData.consistency,
+        defect_detected: aiData.defect_detected,
+        ai_result:       aiData.ai_result,
+      },
+    })
+ 
+    await updateBatchSummary(batchId, aiData.grade)
+    console.log(`   ✅ processWithAI DONE [${gradingId}] → grade ${aiData.grade}`)
+ 
+  } catch (err) {
+    console.error(`   ❌ processWithAI FAILED [${gradingId}]:`, err.message)
+    console.error(err.stack)
+ 
+    // Update DB ke ERROR dengan pesan yang jelas
+    await prisma.gradingResult.update({
+      where: { id: gradingId },
+      data: {
+        status:        'ERROR',
+        error_message: err.message,
+      },
+    }).catch(dbErr => {
+      console.error(`   ❌ Gagal update status ERROR ke DB:`, dbErr.message)
+    })
+  }
+}
+ 
+ 
+/**
+ * GET /api/gradings/:id/status
+ */
+export const getGradingStatus = async (req, res) => {
+  try {
+    const grading = await prisma.gradingResult.findUnique({
+      where: { id: req.params.id },
+      select: {
+        id:              true,
+        grading_code:    true,
+        status:          true,
+        grade:           true,
+        confidence:      true,
+        defect_detected: true,
+        error_message:   true,
+        ai_result:       true,
+      },
+    })
+    if (!grading) return res.status(404).json({ error: 'Not found' })
+    res.json(grading)
+  } catch (err) {
+    res.status(500).json({ message: err.message })
+  }
+}
+ 
 
-//     res.json(data);
-//   } catch (error) {
-//     res.status(500).json({ message: error.message });
-//   }
-// };
 
-// export const getAllGrading = async (req, res) => {
-//   try {
-//     const data = await prisma.gradingResult.findMany({
-//       include: {
-//         batch: true,
-//         graded_by: true,
-//       },
-//       orderBy: {
-//         createdAt: "desc",
-//       },
-//     });
-
-//     res.json(data);
-//   } catch (error) {
-//     res.status(500).json({ message: error.message });
-//   }
-// };
+// ── Helpers ─────────────────────────────────────────────────────
+async function updateBatchSummary(batchId, grade) {
+  const updateData = { total_fruits: { increment: 1 } }
+  if (grade === 'A')      updateData.total_grade_a = { increment: 1 }
+  else if (grade === 'B') updateData.total_grade_b = { increment: 1 }
+  else if (grade === 'C') updateData.total_grade_c = { increment: 1 }
+  else if (grade === 'REJECT') updateData.total_reject = { increment: 1 }
+  await prisma.batch.update({ where: { id: batchId }, data: updateData })
+}
 
 /**
  * GET GRADING BY ID
@@ -142,280 +323,6 @@ export const getGradingByQr = async (req, res) => {
     res.status(500).json({ message: error.message });
   }
 };
-/**
- * GET GRADING BY BATCH
- */
-// export const getGradingByBatch = async (req, res) => {
-//   try {
-//     const { batchId } = req.params;
-
-//     const data = await prisma.gradingResult.findMany({
-//       where: {
-//         batch_id: batchId,
-//       },
-//       orderBy: {
-//         createdAt: "desc",
-//       },
-//     });
-
-//     res.json(data);
-//   } catch (error) {
-//     res.status(500).json({ message: error.message });
-//   }
-// };
-
-/**
- * CREATE GRADING (CORE FLOW)
- */
-
-export const createGrading = async (req, res) => {
-  try {
-    // =========================
-    // GET BODY
-    // =========================
-    const {
-      batch_id,
-      grade,
-      ai_result,
-      confidence_avg,
-      total_detected,
-      consistency,
-      confidence,
-      defect_detected,
-      expiry_prediction,
-      color_score,
-      texture_score,
-      defect_score,
-      size_score,
-      weight_estimate,
-      ml_model_used,
-      ml_model_version,
-      graded_by_id,
-    } = req.body;
-
-    // =========================
-    // PARSE DATA
-    // =========================
-    const parsedConfidence =
-      confidence === "" || confidence === undefined
-        ? null
-        : parseFloat(confidence);
-
-    const parsedDefect =
-      defect_detected === "true" || defect_detected === true;
-
-    // =========================
-    // VALIDASI BATCH
-    // =========================
-    const batch = await prisma.batch.findUnique({
-      where: { id: batch_id },
-    });
-
-    if (!batch)
-      return res.status(404).json({ error: "Batch tidak ditemukan" });
-
-    if (batch.status !== "OPEN") {
-      return res
-        .status(400)
-        .json({ error: "Batch sudah ditutup, tidak bisa tambah grading" });
-    }
-
-    // =========================
-    // GENERATE CODE
-    // =========================
-    const grading_code = await generateGradingCode(batch_id);
-    const qr_token = `${grading_code}-${nanoid(6)}`;
-
-    // =========================
-    // RENAME FILES
-    // =========================
-    const uploadedFiles = req.files?.images || [];
-
-    const date = new Date()
-      .toISOString()
-      .split("T")[0]
-      .replace(/-/g, "");
-
-    const renamedFiles = uploadedFiles.map((file, index) => {
-      const ext = path.extname(file.originalname);
-      const newName = `${date}-${grading_code}-${index + 1}${ext}`;
-      const newPath = path.join("uploads", newName);
-
-      fs.renameSync(file.path, newPath);
-
-      return `/uploads/${newName}`;
-    });
-
-    // =========================
-    // SAVE TO DB
-    // =========================
-    const result = await prisma.gradingResult.create({
-      data: {
-        batch_id,
-        grading_code,
-
-        grade,
-        confidence: parsedConfidence,
-        defect_detected: parsedDefect,
-        expiry_prediction,
-
-        ai_result: ai_result ? JSON.parse(ai_result) : null,
-        confidence_avg: confidence_avg ? parseFloat(confidence_avg) : null,
-        total_detected: total_detected ? parseInt(total_detected) : null,
-        consistency: consistency || null,
-
-        color_score:
-          color_score === "" ? null : parseFloat(color_score),
-        texture_score:
-          texture_score === "" ? null : parseFloat(texture_score),
-        defect_score:
-          defect_score === "" ? null : parseFloat(defect_score),
-        size_score:
-          size_score === "" ? null : parseFloat(size_score),
-        weight_estimate:
-          weight_estimate === "" ? null : parseFloat(weight_estimate),
-
-        ml_model_used,
-        ml_model_version,
-
-        image_urls: renamedFiles,
-
-        qr_token,
-        graded_by_id,
-      },
-    });
-
-    // =========================
-    // UPDATE BATCH SUMMARY
-    // =========================
-    const updateData = {
-      total_fruits: { increment: 1 },
-    };
-
-    if (grade === "A") updateData.total_grade_a = { increment: 1 };
-    if (grade === "B") updateData.total_grade_b = { increment: 1 };
-    if (grade === "C") updateData.total_grade_c = { increment: 1 };
-    if (grade === "REJECT") updateData.total_reject = { increment: 1 };
-
-    await prisma.batch.update({
-      where: { id: batch_id },
-      data: updateData,
-    });
-
-    console.log("REQ BODY:", req.body);
-
-    res.status(201).json(result);
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: error.message });
-  }
-};
-// export const createGrading = async (req, res) => {
-//   try {
-//     // Get form fields from req.body (parsed by multer)
-//     const {
-//       batch_id,
-//       grade,
-//       expiry_prediction,
-//       color_score,
-//       texture_score,
-//       defect_score,
-//       size_score,
-//       weight_estimate,
-//       ml_model_used,
-//       ml_model_version,
-//       image_urls,
-//       graded_by_id,
-//     } = req.body;
-
-//     const parsedConfidence =
-//     confidence === '' || confidence === undefined
-//       ? null
-//       : parseFloat(confidence);
-
-//     const parsedDefect =
-//       defect_detected === 'true' || defect_detected === true;
-    
-//     // Get uploaded files
-//     const uploadedFiles = req.files?.images || [];
-//     import fs from "fs";
-//     import path from "path";
-
-//     const date = new Date().toISOString().split("T")[0].replace(/-/g, "");
-
-//     const renamedFiles = uploadedFiles.map((file, index) => {
-//       const ext = path.extname(file.originalname);
-//       const newName = `${date}-${grading_code}-${index + 1}${ext}`;
-//       const newPath = path.join("uploads", newName);
-
-//       fs.renameSync(file.path, newPath);
-
-//       return `/uploads/${newName}`;
-//     });
-//     const imageUrls = renamedFiles;
-//     // const imageUrls = uploadedFiles.map(file => `/uploads/${file.filename}`);
-
-//     // Cek batch masih OPEN
-//     const batch = await prisma.batch.findUnique({
-//       where: { id: batch_id }
-//     })
-//     if (!batch) return res.status(404).json({ error: 'Batch tidak ditemukan' })
-//     if (batch.status !== 'OPEN') {
-//       return res.status(400).json({ error: 'Batch sudah ditutup, tidak bisa tambah grading' })
-//     }
-
-//     // 🔥 Generate code & QR
-//     const timestamp = Date.now();
-//     const grading_code = await generateGradingCode(batch_id)
-//     const qr_token = `${grading_code}-${nanoid(6)}`
-
-//     const result = await prisma.gradingResult.create({
-//       data: {
-//         batch_id,
-//         grading_code,
-
-//         grade,
-//         confidence: parsedConfidence,
-//         defect_detected: parsedDefect,
-//         expiry_prediction,
-
-//         color_score,
-//         texture_score,
-//         defect_score,
-//         size_score,
-//         weight_estimate,
-
-//         ml_model_used,
-//         ml_model_version,
-
-//         image_urls: imageUrls, // Use uploaded file URLs
-
-//         qr_token,
-
-//         graded_by_id,
-//       },
-//     });
-
-//     // 🔥 UPDATE SUMMARY BATCH
-//     const updateData = {
-//       total_fruits: { increment: 1 },
-//     };
-
-//     if (grade === "A") updateData.total_grade_a = { increment: 1 };
-//     if (grade === "B") updateData.total_grade_b = { increment: 1 };
-//     if (grade === "C") updateData.total_grade_c = { increment: 1 };
-//     if (grade === "REJECT") updateData.total_reject = { increment: 1 };
-
-//     await prisma.batch.update({
-//       where: { id: batch_id },
-//       data: updateData,
-//     });
-//     console.log("REQ BODY:", req.body)
-//     res.status(201).json(result);
-//   } catch (error) {
-//     res.status(500).json({ message: error.message });
-//   }
-// };
 
 /**
  * UPDATE GRADING
