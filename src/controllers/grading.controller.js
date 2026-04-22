@@ -13,26 +13,26 @@ const AI_SERVICE_URL = process.env.AI_SERVICE_URL || 'http://localhost:8000'
  */
 export const getAllGrading = async (req, res) => {
   try {
-    const { batch_id } = req.query;
-
-    console.log("batch_id query:", batch_id); // ← cek ini dulu di terminal
+    const { batch_id } = req.query
+    console.log("batch_id query:", batch_id)
 
     const data = await prisma.gradingResult.findMany({
       where: batch_id ? { batch_id } : {},
       include: {
         batch: true,
         graded_by: {
-          select: { id: true, name: true, role: true } // jangan expose password_hash
+          select: { id: true, name: true, role: true }
         },
       },
       orderBy: { createdAt: "desc" },
-    });
+    })
 
-    res.json(data);
+    res.json(data)
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    console.error('❌ getAllGrading error:', error) // ← tambah ini
+    res.status(500).json({ message: error.message })
   }
-};
+}
 
 /**
  * CREATE GRADING

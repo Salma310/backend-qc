@@ -1,4 +1,5 @@
 import { prisma } from "../lib/prisma.js";
+import { nanoid } from 'nanoid'
 
 /**
  * Generate batch code: BTH-[LAND_CODE]-[YYYYMMDD]-[URUT]
@@ -35,11 +36,21 @@ export const generateBatchCode = async (landId) => {
  * (LEBIH RINGKAS & GA DUPLIKASI LOT CODE)
  */
 export const generateGradingCode = async (batchId) => {
+  // Ambil lot_code batch untuk prefix
+  const batch = await prisma.batch.findUnique({
+    where: { id: batchId },
+    select: { lot_code: true },
+  })
+
+  if (!batch) throw new Error('Batch tidak ditemukan')
+
   const count = await prisma.gradingResult.count({
     where: { batch_id: batchId },
-  });
+  })
 
-  const urut = String(count + 1).padStart(3, "0");
+  const urut = String(count + 1).padStart(3, '0')
+  const unique = nanoid(4).toUpperCase() // anti race condition
 
-  return `G-${urut}`;
-};
+  // Contoh: GRD-BTH-LND005-20260421-001-A3BX
+  return `GRD-${batch.lot_code}-${urut}-${unique}`
+}
