@@ -79,7 +79,6 @@ export const createGrading = async (req, res) => {
     const result = await prisma.gradingResult.create({
       data: {
         grading_code,
-        qr_token,
         image_urls:     renamedFiles,
         grading_method: isAI ? 'AI' : 'MANUAL',
         status:         isAI ? 'PROCESSING' : 'DONE',
@@ -266,7 +265,6 @@ export const getGradingById = async (req, res) => {
       include: {
         batch: true,
         graded_by: true,
-        qr_logs: true,
       },
     });
 
@@ -280,49 +278,49 @@ export const getGradingById = async (req, res) => {
   }
 };
 
-export const getGradingByQr = async (req, res) => {
-  try {
-    const { qrToken } = req.params;
+// export const getGradingByQr = async (req, res) => {
+//   try {
+//     const { qrToken } = req.params;
 
-    const data = await prisma.gradingResult.findUnique({
-      where: { qr_token: qrToken },
-      include: {
-        batch: {
-          include: {
-            farmer: true,
-            land: true,
-          },
-        },
-        graded_by: {
-          select: { id: true, name: true, role: true },
-        },
-      },
-    });
+//     const data = await prisma.gradingResult.findUnique({
+//       where: { qr_token: qrToken },
+//       include: {
+//         batch: {
+//           include: {
+//             farmer: true,
+//             land: true,
+//           },
+//         },
+//         graded_by: {
+//           select: { id: true, name: true, role: true },
+//         },
+//       },
+//     });
 
-    if (!data) {
-      return res.status(404).json({ message: "QR tidak ditemukan atau tidak valid" });
-    }
+//     if (!data) {
+//       return res.status(404).json({ message: "QR tidak ditemukan atau tidak valid" });
+//     }
 
-    if (!data.qr_is_active) {
-      return res.status(403).json({ message: "QR sudah tidak aktif" });
-    }
+//     if (!data.qr_is_active) {
+//       return res.status(403).json({ message: "QR sudah tidak aktif" });
+//     }
 
-    // Catat access log
-    await prisma.qRAccessLog.create({
-      data: {
-        grading_id: data.id,
-        device_type: req.headers["user-agent"]?.includes("Mobile") ? "Mobile" : "Desktop",
-        ip_address: req.ip || req.headers["x-forwarded-for"] || null,
-        user_agent: req.headers["user-agent"] || null,
-        location: null, // isi dari GPS kalau frontend kirim
-      },
-    });
+//     // Catat access log
+//     await prisma.qRAccessLog.create({
+//       data: {
+//         grading_id: data.id,
+//         device_type: req.headers["user-agent"]?.includes("Mobile") ? "Mobile" : "Desktop",
+//         ip_address: req.ip || req.headers["x-forwarded-for"] || null,
+//         user_agent: req.headers["user-agent"] || null,
+//         location: null, // isi dari GPS kalau frontend kirim
+//       },
+//     });
 
-    res.json(data);
-  } catch (error) {
-    res.status(500).json({ message: error.message });
-  }
-};
+//     res.json(data);
+//   } catch (error) {
+//     res.status(500).json({ message: error.message });
+//   }
+// };
 
 /**
  * UPDATE GRADING

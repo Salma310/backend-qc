@@ -5,7 +5,6 @@ import path from "path";
 import {
   getAllGrading,
   getGradingById,
-  getGradingByQr,
   createGrading,
   updateGrading,
   deleteGrading,
@@ -49,7 +48,6 @@ const gradingUpload = upload.fields([
 
 // ROUTES
 router.get("/", getAllGrading);
-router.get("/qr/:qrToken", getGradingByQr);
 router.get("/:id", getGradingById);
 
 router.get('/:id/status',        getGradingStatus)
