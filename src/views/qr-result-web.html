@@ -1,0 +1,757 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+  <title>AgriGrade · Scan Result</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --grade-a-bg: #d1fae5; --grade-a-text: #064e3b; --grade-a-accent: #10b981; --grade-a-soft: #ecfdf5;
+      --grade-b-bg: #dbeafe; --grade-b-text: #1e3a8a; --grade-b-accent: #3b82f6; --grade-b-soft: #eff6ff;
+      --grade-c-bg: #fef3c7; --grade-c-text: #78350f; --grade-c-accent: #f59e0b; --grade-c-soft: #fffbeb;
+      --grade-r-bg: #fee2e2; --grade-r-text: #7f1d1d; --grade-r-accent: #ef4444; --grade-r-soft: #fff1f2;
+      --ink: #0f0f0f;
+      --muted: #6b7280;
+      --surface: #ffffff;
+      --border: #e5e7eb;
+      --radius: 20px;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+    body {
+      font-family: 'Syne', sans-serif;
+      background: #f8f7f4;
+      min-height: 100vh;
+      color: var(--ink);
+      overflow-x: hidden;
+    }
+
+    /* ── BG NOISE TEXTURE ── */
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.03'/%3E%3C/svg%3E");
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    .container {
+      position: relative;
+      z-index: 1;
+      max-width: 480px;
+      margin: 0 auto;
+      min-height: 100vh;
+      padding: 0 0 80px;
+    }
+
+    /* ── HERO GRADE SECTION ── */
+    .hero {
+      position: relative;
+      overflow: hidden;
+      padding: 52px 28px 36px;
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 20px;
+    }
+
+    .hero-bg {
+      position: absolute;
+      inset: 0;
+      background: var(--grade-bg, #d1fae5);
+      opacity: 0.35;
+      transition: background 0.5s;
+    }
+
+    .hero-blob {
+      position: absolute;
+      width: 280px; height: 280px;
+      border-radius: 50%;
+      background: var(--grade-accent, #10b981);
+      opacity: 0.12;
+      right: -80px;
+      top: -80px;
+      filter: blur(60px);
+      transition: background 0.5s;
+    }
+
+    .brand-tag {
+      font-family: 'Space Mono', monospace;
+      font-size: 10px;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--muted);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      position: relative;
+    }
+
+    .brand-dot {
+      width: 6px; height: 6px;
+      border-radius: 50%;
+      background: var(--grade-accent, #10b981);
+      animation: pulse 2s ease-in-out infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.5; transform: scale(0.8); }
+    }
+
+    .grade-display {
+      position: relative;
+      display: flex;
+      align-items: flex-end;
+      gap: 16px;
+    }
+
+    .grade-letter {
+      font-size: 96px;
+      font-weight: 800;
+      line-height: 1;
+      color: var(--grade-text, #064e3b);
+      letter-spacing: -4px;
+      transition: color 0.4s;
+    }
+
+    .grade-meta {
+      padding-bottom: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .grade-label {
+      font-size: 12px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      color: var(--grade-text, #064e3b);
+      opacity: 0.7;
+    }
+
+    .grade-desc {
+      font-size: 22px;
+      font-weight: 700;
+      color: var(--grade-text, #064e3b);
+      line-height: 1.2;
+    }
+
+    .verified-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: var(--grade-text, #064e3b);
+      color: var(--grade-soft, #ecfdf5);
+      border-radius: 100px;
+      padding: 6px 14px;
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.06em;
+    }
+
+    /* ── MAIN CARD ── */
+    .card {
+      margin: 0 16px;
+      background: var(--surface);
+      border-radius: var(--radius);
+      border: 1px solid var(--border);
+      overflow: hidden;
+      box-shadow: 0 2px 16px rgba(0,0,0,0.04);
+    }
+
+    .card + .card { margin-top: 12px; }
+
+    .card-header {
+      padding: 18px 20px 14px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .card-title {
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.14em;
+      color: var(--muted);
+    }
+
+    .card-icon {
+      width: 28px; height: 28px;
+      border-radius: 8px;
+      background: #f3f4f6;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 14px;
+    }
+
+    .info-list {
+      padding: 4px 0;
+    }
+
+    .info-row {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      padding: 13px 20px;
+      gap: 16px;
+    }
+
+    .info-row + .info-row {
+      border-top: 1px solid #f9fafb;
+    }
+
+    .info-key {
+      font-size: 12px;
+      color: var(--muted);
+      font-weight: 500;
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+
+    .info-val {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--ink);
+      text-align: right;
+      word-break: break-word;
+    }
+
+    .info-val.mono {
+      font-family: 'Space Mono', monospace;
+      font-size: 11px;
+      color: var(--muted);
+    }
+
+    /* ── STATS PILLS ── */
+    .stats-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      padding: 16px;
+    }
+
+    .stat-pill {
+      background: #f9fafb;
+      border-radius: 14px;
+      padding: 14px 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .stat-pill.accent {
+      background: var(--grade-soft, #ecfdf5);
+    }
+
+    .stat-num {
+      font-size: 28px;
+      font-weight: 800;
+      color: var(--ink);
+      line-height: 1;
+    }
+
+    .stat-pill.accent .stat-num {
+      color: var(--grade-text, #064e3b);
+    }
+
+    .stat-unit {
+      font-size: 11px;
+      color: var(--muted);
+      font-weight: 500;
+    }
+
+    /* ── TIMELINE / ACCESS ── */
+    .timeline-item {
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+      padding: 13px 20px;
+    }
+
+    .timeline-item + .timeline-item { border-top: 1px solid #f9fafb; }
+
+    .timeline-dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: var(--grade-accent, #10b981);
+      margin-top: 5px;
+      flex-shrink: 0;
+    }
+
+    .timeline-content { flex: 1; }
+
+    .timeline-label {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--ink);
+    }
+
+    .timeline-sub {
+      font-size: 11px;
+      color: var(--muted);
+      margin-top: 2px;
+    }
+
+    /* ── FOOTER INFO ── */
+    .footer-note {
+      margin: 20px 16px 0;
+      padding: 16px 20px;
+      background: #f9fafb;
+      border-radius: 14px;
+      border: 1px dashed var(--border);
+      text-align: center;
+    }
+
+    .footer-note p {
+      font-size: 11px;
+      color: var(--muted);
+      line-height: 1.6;
+    }
+
+    .footer-note strong {
+      display: block;
+      font-family: 'Space Mono', monospace;
+      font-size: 10px;
+      letter-spacing: 0.1em;
+      color: #9ca3af;
+      margin-top: 6px;
+    }
+
+    /* ── LOADING STATE ── */
+    #loading {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      gap: 20px;
+      padding: 40px;
+    }
+
+    .loader-ring {
+      width: 48px; height: 48px;
+      border: 3px solid #e5e7eb;
+      border-top-color: #10b981;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .loader-text {
+      font-size: 14px;
+      color: var(--muted);
+      font-weight: 500;
+      text-align: center;
+    }
+
+    /* ── ERROR STATE ── */
+    #error-state {
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      padding: 40px;
+      text-align: center;
+      gap: 16px;
+    }
+
+    .error-icon {
+      font-size: 52px;
+      line-height: 1;
+    }
+
+    .error-title {
+      font-size: 22px;
+      font-weight: 800;
+      color: var(--ink);
+    }
+
+    .error-body {
+      font-size: 14px;
+      color: var(--muted);
+      line-height: 1.6;
+      max-width: 280px;
+    }
+
+    /* ── ANIMATIONS ── */
+    .fade-up {
+      opacity: 0;
+      transform: translateY(16px);
+      animation: fadeUp 0.5s ease forwards;
+    }
+
+    @keyframes fadeUp {
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .delay-1 { animation-delay: 0.08s; }
+    .delay-2 { animation-delay: 0.16s; }
+    .delay-3 { animation-delay: 0.24s; }
+    .delay-4 { animation-delay: 0.32s; }
+    .delay-5 { animation-delay: 0.40s; }
+
+    /* ── INACTIVE QR ── */
+    .inactive-banner {
+      margin: 0 16px 12px;
+      background: #fff1f2;
+      border: 1px solid #fecaca;
+      border-radius: 14px;
+      padding: 14px 18px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .inactive-icon { font-size: 20px; }
+
+    .inactive-text .t1 {
+      font-size: 13px;
+      font-weight: 700;
+      color: #b91c1c;
+    }
+
+    .inactive-text .t2 {
+      font-size: 11px;
+      color: #ef4444;
+      margin-top: 2px;
+    }
+
+    /* ── SCAN COUNT CHIP ── */
+    .scan-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      background: #f3f4f6;
+      border-radius: 100px;
+      padding: 5px 11px;
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--muted);
+    }
+  </style>
+</head>
+<body>
+
+<!-- Loading -->
+<div id="loading">
+  <div class="loader-ring"></div>
+  <p class="loader-text">Memuat informasi produk…</p>
+</div>
+
+<!-- Error -->
+<div id="error-state">
+  <div class="error-icon">🚫</div>
+  <p class="error-title" id="error-title">QR Tidak Valid</p>
+  <p class="error-body" id="error-body">Token yang kamu scan tidak ditemukan atau sudah tidak aktif.</p>
+</div>
+
+<!-- Main Content (hidden until loaded) -->
+<div id="app" style="display:none;" class="container">
+  <!-- Hero -->
+  <div class="hero fade-up" id="hero-section">
+    <div class="hero-bg" id="hero-bg"></div>
+    <div class="hero-blob" id="hero-blob"></div>
+
+    <div class="brand-tag">
+      <div class="brand-dot" id="brand-dot"></div>
+      AgriGrade · Verified Product
+    </div>
+
+    <div class="grade-display">
+      <div class="grade-letter" id="grade-letter">A</div>
+      <div class="grade-meta">
+        <div class="grade-label">Grade Buah</div>
+        <div class="grade-desc" id="grade-desc">Kualitas Terbaik</div>
+      </div>
+    </div>
+
+    <div class="verified-badge" id="verified-badge">
+      ✓ &nbsp;Terverifikasi AI Grading
+    </div>
+  </div>
+
+  <!-- Inactive Banner (hidden by default) -->
+  <div class="inactive-banner fade-up delay-1" id="inactive-banner" style="display:none;">
+    <div class="inactive-icon">⚠️</div>
+    <div class="inactive-text">
+      <div class="t1">QR Tidak Aktif</div>
+      <div class="t2" id="inactive-reason">QR ini telah dinonaktifkan</div>
+    </div>
+  </div>
+
+  <!-- Stats -->
+  <div class="card fade-up delay-1" id="stats-card">
+    <div class="stats-row">
+      <div class="stat-pill accent">
+        <div class="stat-num" id="stat-fruits">—</div>
+        <div class="stat-unit">Total Buah</div>
+      </div>
+      <div class="stat-pill">
+        <div class="stat-num" id="stat-weight">—</div>
+        <div class="stat-unit">Estimasi Berat</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Batch Info Card -->
+  <div class="card fade-up delay-2">
+    <div class="card-header">
+      <span class="card-title">Info Batch</span>
+      <div class="card-icon">📦</div>
+    </div>
+    <div class="info-list">
+      <div class="info-row">
+        <span class="info-key">Lot Code</span>
+        <span class="info-val mono" id="lot-code">—</span>
+      </div>
+      <div class="info-row">
+        <span class="info-key">Jenis Buah</span>
+        <span class="info-val" id="fruit-type">—</span>
+      </div>
+      <div class="info-row">
+        <span class="info-key">Tanggal Panen</span>
+        <span class="info-val" id="harvest-date">—</span>
+      </div>
+      <div class="info-row">
+        <span class="info-key">Disortir</span>
+        <span class="info-val" id="sorted-at">—</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Farmer Card -->
+  <div class="card fade-up delay-3">
+    <div class="card-header">
+      <span class="card-title">Asal Produk</span>
+      <div class="card-icon">🌾</div>
+    </div>
+    <div class="info-list">
+      <div class="info-row">
+        <span class="info-key">Petani</span>
+        <span class="info-val" id="farmer-name">—</span>
+      </div>
+      <div class="info-row">
+        <span class="info-key">Desa</span>
+        <span class="info-val" id="origin-village">—</span>
+      </div>
+      <div class="info-row">
+        <span class="info-key">Kota / Kab.</span>
+        <span class="info-val" id="origin-city">—</span>
+      </div>
+      <div class="info-row">
+        <span class="info-key">Kode Petani</span>
+        <span class="info-val mono" id="farmer-code">—</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Grading Detail Card -->
+  <div class="card fade-up delay-4" id="grading-card">
+    <div class="card-header">
+      <span class="card-title">Detail Grading</span>
+      <div class="card-icon">🔬</div>
+    </div>
+    <div class="info-list" id="grading-list">
+      <!-- filled dynamically -->
+    </div>
+  </div>
+
+  <!-- Access Count -->
+  <div class="card fade-up delay-5">
+    <div class="card-header">
+      <span class="card-title">Riwayat Scan</span>
+      <div class="card-icon">📡</div>
+    </div>
+    <div class="info-list">
+      <div class="info-row">
+        <span class="info-key">Total Pemindaian</span>
+        <span class="scan-chip" id="scan-count">
+          <span>👁</span>
+          <span id="scan-num">—</span>
+        </span>
+      </div>
+      <div class="info-row">
+        <span class="info-key">Scan Terakhir</span>
+        <span class="info-val" id="last-scan">Baru saja</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Footer -->
+  <div class="footer-note fade-up delay-5">
+    <p>Produk ini telah melalui proses grading berbasis AI untuk memastikan kualitas dan keaslian asal buah.</p>
+    <strong id="qr-token-footer">TOKEN: —</strong>
+  </div>
+</div>
+
+<script>
+  // ── CONFIG ──────────────────────────────────────────────
+  const BASE_URL = 'http://192.168.11.147:3000'; // ganti sesuai server
+
+  // ── Grade palette ────────────────────────────────────────
+  const GRADE_META = {
+    A:      { desc: 'Kualitas Terbaik',  bg: '#d1fae5', text: '#064e3b', accent: '#10b981', soft: '#ecfdf5' },
+    B:      { desc: 'Kualitas Baik',     bg: '#dbeafe', text: '#1e3a8a', accent: '#3b82f6', soft: '#eff6ff' },
+    C:      { desc: 'Kualitas Standar',  bg: '#fef3c7', text: '#78350f', accent: '#f59e0b', soft: '#fffbeb' },
+    REJECT: { desc: 'Tidak Lolos Sortir',bg: '#fee2e2', text: '#7f1d1d', accent: '#ef4444', soft: '#fff1f2' },
+  };
+
+  // ── Helpers ──────────────────────────────────────────────
+  const fmt = (d) => d ? new Date(d).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' }) : '—';
+  const fmtDT = (d) => d ? new Date(d).toLocaleString('id-ID', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : '—';
+  const set = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val || '—'; };
+  const token = () => window.location.pathname.split('/').filter(Boolean).pop();
+
+  // ── Show error ───────────────────────────────────────────
+  const showError = (title, body) => {
+    document.getElementById('loading').style.display = 'none';
+    const err = document.getElementById('error-state');
+    err.style.display = 'flex';
+    document.getElementById('error-title').textContent = title;
+    document.getElementById('error-body').textContent = body;
+  };
+
+  // ── Apply grade theme ─────────────────────────────────────
+  const applyGrade = (grade) => {
+    const m = GRADE_META[grade] || GRADE_META.A;
+    document.getElementById('hero-bg').style.background = m.bg;
+    document.getElementById('hero-blob').style.background = m.accent;
+    document.getElementById('brand-dot').style.background = m.accent;
+    const gl = document.getElementById('grade-letter');
+    gl.style.color = m.text;
+    document.getElementById('grade-desc').style.color = m.text;
+    document.getElementById('grade-desc').textContent = m.desc;
+    document.getElementById('verified-badge').style.background = m.text;
+    document.getElementById('verified-badge').style.color = m.soft;
+    // set grade letter
+    gl.textContent = grade === 'REJECT' ? 'R' : grade;
+
+    // Stats card soft bg
+    document.querySelectorAll('.stat-pill.accent').forEach(el => {
+      el.style.background = m.soft;
+    });
+    document.querySelectorAll('.stat-pill.accent .stat-num').forEach(el => {
+      el.style.color = m.text;
+    });
+    document.querySelectorAll('.timeline-dot').forEach(el => {
+      el.style.background = m.accent;
+    });
+    document.querySelectorAll('.brand-dot').forEach(el => {
+      el.style.background = m.accent;
+    });
+    document.getElementById('scan-chip')?.style && (document.getElementById('scan-chip').style.setProperty('--dot', m.accent));
+  };
+
+  // ── Main fetch ────────────────────────────────────────────
+  const main = async () => {
+    const tok = token();
+    if (!tok || tok === 'qr') return showError('Token Tidak Valid', 'URL tidak mengandung token yang valid.');
+
+    try {
+      // Fetch detail
+      const res = await fetch(`${BASE_URL}/api/qr/${tok}`);
+
+      if (res.status === 404) return showError('QR Tidak Ditemukan', 'Token ini tidak terdaftar di sistem kami.');
+      if (res.status === 410) return showError('QR Tidak Aktif', 'QR ini sudah dinonaktifkan oleh admin.');
+      if (!res.ok) throw new Error('Server error');
+
+      const data = await res.json();
+
+      // Apply grade theme
+      applyGrade(data.grade);
+
+      // Inactive banner
+      if (!data.qr_is_active) {
+        const banner = document.getElementById('inactive-banner');
+        banner.style.display = 'flex';
+        if (data.deactivated_reason) {
+          set('inactive-reason', `Alasan: ${data.deactivated_reason}`);
+        }
+      }
+
+      // Stats
+      set('stat-fruits', data.total_fruits?.toString());
+      document.getElementById('stat-weight').textContent =
+        data.total_weight ? `${data.total_weight.toFixed(1)} kg` : '—';
+
+      // Batch
+      const batch = data.batch || {};
+      set('lot-code', batch.lot_code);
+      set('fruit-type', data.fruit_type || batch.fruit_type);
+      set('harvest-date', fmt(data.harvest_date || batch.harvest_date));
+      set('sorted-at', fmt(data.sorted_at));
+
+      // Farmer
+      set('farmer-name', data.farmer_name || batch.farmer?.name);
+      set('origin-village', data.origin_village || batch.land?.location);
+      set('origin-city', data.origin_city);
+      set('farmer-code', batch.farmer?.farmer_code);
+
+      // Grading summary
+      const gradingList = document.getElementById('grading-list');
+      const results = data.grading_results || [];
+      if (results.length > 0) {
+        const avgConf = results.reduce((s, r) => s + (r.confidence || 0), 0) / results.length;
+        const detected = results.reduce((s, r) => s + (r.total_detected || 1), 0);
+        gradingList.innerHTML = `
+          <div class="info-row">
+            <span class="info-key">Jumlah Grading</span>
+            <span class="info-val">${results.length} sesi</span>
+          </div>
+          <div class="info-row">
+            <span class="info-key">Total Terdeteksi</span>
+            <span class="info-val">${detected} buah</span>
+          </div>
+          <div class="info-row">
+            <span class="info-key">Rata-rata Confidence</span>
+            <span class="info-val">${results[0]?.confidence != null ? Math.round(avgConf * 100) + '%' : '—'}</span>
+          </div>
+          <div class="info-row">
+            <span class="info-key">Model AI</span>
+            <span class="info-val mono">${results[0]?.ml_model_used || 'AgriGrade AI'}</span>
+          </div>
+        `;
+      } else {
+        document.getElementById('grading-card').style.display = 'none';
+      }
+
+      // Fetch logs for scan count
+      try {
+        const logsRes = await fetch(`${BASE_URL}/api/qr/${tok}/logs`);
+        if (logsRes.ok) {
+          const logs = await logsRes.json();
+          set('scan-num', logs.length.toString());
+          if (logs.length > 1) {
+            set('last-scan', fmtDT(logs[1]?.accessed_at)); // index 1 = sebelumnya (0 = yg baru saja)
+          }
+        }
+      } catch (_) {}
+
+      // Token footer
+      set('qr-token-footer', `TOKEN: ${data.qr_token}`);
+
+      // Show
+      document.getElementById('loading').style.display = 'none';
+      document.getElementById('app').style.display = 'block';
+
+    } catch (err) {
+      showError('Gagal Memuat Data', 'Terjadi kesalahan saat mengambil data. Coba lagi sebentar.');
+      console.error(err);
+    }
+  };
+
+  main();
+</script>
+</body>
+</html>

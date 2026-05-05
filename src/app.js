@@ -6,6 +6,7 @@ import fs from "fs";
 import { fileURLToPath } from "url";
 
 // routes
+import authRoutes from "./routes/auth.routes.js";
 import batchRoutes from "./routes/batch.routes.js";
 import gradingRoutes from "./routes/grading.routes.js";
 import farmerRoutes from "./routes/farmer.routes.js";
@@ -14,6 +15,7 @@ import userRoutes from "./routes/user.routes.js";
 import notificationRoutes from "./routes/notification.routes.js";
 import qrRoutes from "./routes/qr.routes.js";
 import dashboardRoutes from "./routes/dashboard.routes.js";
+import { getQRResultPage } from "./controllers/qr.controller.js";
 
 const app = express();
 
@@ -36,7 +38,11 @@ app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
+// WEB ROUTES (HTML Pages)
+app.get("/qr/:token", getQRResultPage);
+
 // API
+app.use("/api/auth", authRoutes);   
 app.use("/api/batch", batchRoutes);
 app.use("/api/gradings", gradingRoutes);
 app.use("/api/farmers", farmerRoutes);

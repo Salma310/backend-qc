@@ -1,5 +1,7 @@
 import { prisma } from "../lib/prisma.js";
 import { getBundleByToken } from "../../services/bundleService.js";
+import path from "path";
+import { fileURLToPath } from "url";
 
 /**
  * AKSES QR PUBLIK
@@ -193,6 +195,26 @@ export const getQRLogs = async (req, res) => {
     });
 
     res.json(logs);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+/**
+ * SERVE QR RESULT PAGE (HTML)
+ * Menampilkan halaman hasil scan QR dengan data dinamis
+ *
+ * GET /qr/:token
+ */
+export const getQRResultPage = async (req, res) => {
+  try {
+    const { token } = req.params;
+    const __filename = fileURLToPath(import.meta.url);
+    const __dirname = path.dirname(__filename);
+    const htmlPath = path.join(__dirname, "../views/qr-result-web.html");
+
+    // Kirim HTML file
+    res.sendFile(htmlPath);
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
