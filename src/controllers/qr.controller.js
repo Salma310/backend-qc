@@ -1,6 +1,7 @@
 import { prisma } from "../lib/prisma.js";
 import { getBundleByToken } from "../../services/bundleService.js";
 import path from "path";
+import fs from 'fs';
 import { fileURLToPath } from "url";
 
 /**
@@ -84,7 +85,7 @@ export const getQRImage = async (req, res) => {
 
     res.json({
       grade: bundle.grade,
-      image_url: imageUrl,
+      image_url: `${process.env.PUBLIC_BASE_URL}${bundle.qr_image_path}`,
     });
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -110,12 +111,18 @@ export const markAsPrinted = async (req, res) => {
       return res.status(404).json({ message: "Bundle tidak ditemukan" });
     }
 
+    // Validasi printed_by_id harus UUID valid atau null
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+    const validPrintedById = printed_by_id && uuidRegex.test(printed_by_id) 
+      ? printed_by_id 
+      : null  // kalau bukan UUID valid (misal 'system'), set null
+
     const updated = await prisma.batchGradeBundle.update({
       where: { qr_token: token },
       data: {
         print_status: bundle.print_count > 0 ? "REPRINTED" : "PRINTED",
         printed_at: new Date(),
-        printed_by_id: printed_by_id || null,
+        printed_by_id: validPrintedById,
         print_count: { increment: 1 },
       },
     });
@@ -127,6 +134,7 @@ export const markAsPrinted = async (req, res) => {
       printed_at: updated.printed_at,
     });
   } catch (error) {
+    console.error('markAsPrinted error:', error) // ← tambah log
     res.status(500).json({ message: error.message });
   }
 };
@@ -213,8 +221,15 @@ export const getQRResultPage = async (req, res) => {
     const __dirname = path.dirname(__filename);
     const htmlPath = path.join(__dirname, "../views/qr-result-web.html");
 
-    // Kirim HTML file
-    res.sendFile(htmlPath);
+    // Baca HTML, replace placeholder BASE_URL
+    let html = fs.readFileSync(htmlPath, 'utf-8');
+    html = html.replace(
+      /const BASE_URL = ['"][^'"]*['"]/,
+      `const BASE_URL = '${process.env.PUBLIC_BASE_URL || 'http://localhost:4000'}'`
+    );
+
+    res.setHeader('Content-Type', 'text/html');
+    res.send(html);
   } catch (error) {
     res.status(500).json({ message: error.message });
   }

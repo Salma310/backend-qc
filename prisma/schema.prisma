@@ -1,17 +1,192 @@
-// prisma/schema.prisma
-
 generator client {
   provider = "prisma-client-js"
 }
 
 datasource db {
   provider = "postgresql"
-  // url = env("DATABASE_URL")
 }
 
-// ─────────────────────────────────────────
-// ENUM
-// ─────────────────────────────────────────
+model User {
+  id              String             @id @default(uuid())
+  name            String
+  email           String             @unique
+  password_hash   String
+  role            UserRole           @default(QC)
+  phone           String?
+  is_active       Boolean            @default(true)
+  last_login_at   DateTime?
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+  batches_created Batch[]            @relation("BatchCreatedBy")
+  printed_bundles BatchGradeBundle[]
+  gradings        GradingResult[]
+  notifications   Notification[]
+}
+
+model Farmer {
+  farmer_code String   @unique
+  id          String   @id @default(uuid())
+  name        String
+  phone       String?
+  address     String?
+  village     String?
+  district    String?
+  city        String?
+  is_active   Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  batches     Batch[]
+  lands       Land[]
+}
+
+model Land {
+  id         String   @id @default(uuid())
+  farmer_id  String
+  land_code  String   @unique
+  land_name  String?
+  latitude   Float?
+  longitude  Float?
+  location   String?
+  area_size  Float?
+  fruit_type String?
+  is_active  Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  batches    Batch[]
+  farmer     Farmer   @relation(fields: [farmer_id], references: [id])
+}
+
+model Batch {
+  id             String             @id @default(uuid())
+  lot_code       String             @unique
+  farmer_id      String
+  land_id        String
+  fruit_type     String?
+  harvest_date   DateTime?
+  harvest_weight Float?
+  treatment      String?
+  notes          String?
+  status         BatchStatus        @default(OPEN)
+  total_fruits   Int                @default(0)
+  total_grade_a  Int                @default(0)
+  total_grade_b  Int                @default(0)
+  total_grade_c  Int                @default(0)
+  total_reject   Int                @default(0)
+  created_by_id  String?
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+  closed_at      DateTime?
+  created_by     User?              @relation("BatchCreatedBy", fields: [created_by_id], references: [id])
+  farmer         Farmer             @relation(fields: [farmer_id], references: [id])
+  land           Land               @relation(fields: [land_id], references: [id])
+  bundles        BatchGradeBundle[]
+  gradings       GradingResult[]
+  notifications  Notification[]
+
+  @@index([farmer_id])
+  @@index([land_id])
+  @@index([status])
+}
+
+model GradingResult {
+  id                String            @id @default(uuid())
+  batch_id          String
+  grading_code      String            @unique
+  grade             Grade?
+  grading_method    GradingMethod     @default(AI)
+  confidence        Float?
+  defect_detected   Boolean?
+  expiry_prediction Int?
+  color_score       Float?
+  texture_score     Float?
+  defect_score      Float?
+  size_score        Float?
+  weight_estimate   Float?
+  ml_model_used     String?
+  ml_model_version  String?
+  image_urls        String[]
+  graded_by_id      String?
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+  ai_result         Json?
+  confidence_avg    Float?
+  consistency       String?
+  total_detected    Int?
+  error_message     String?
+  bundle_id         String?
+  status            GradingStatus     @default(DONE)
+  batch             Batch             @relation(fields: [batch_id], references: [id])
+  bundle            BatchGradeBundle? @relation(fields: [bundle_id], references: [id])
+  graded_by         User?             @relation(fields: [graded_by_id], references: [id])
+  notifications     Notification[]
+
+  @@index([batch_id])
+  @@index([bundle_id])
+  @@index([grade])
+}
+
+model BatchGradeBundle {
+  id                 String              @id @default(uuid())
+  batch_id           String
+  grade              Grade
+  total_fruits       Int                 @default(0)
+  total_weight       Float?
+  fruit_type         String?
+  harvest_date       DateTime?
+  farmer_name        String?
+  origin_village     String?
+  origin_city        String?
+  sorted_at          DateTime?
+  qr_token           String              @unique
+  qr_url             String?
+  qr_is_active       Boolean             @default(true)
+  deactivated_at     DateTime?
+  deactivated_reason String?
+  print_status       PrintStatus         @default(NOT_PRINTED)
+  printed_at         DateTime?
+  printed_by_id      String?
+  print_count        Int                 @default(0)
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+  qr_image_path      String?
+  batch              Batch               @relation(fields: [batch_id], references: [id])
+  printed_by         User?               @relation(fields: [printed_by_id], references: [id])
+  qr_logs            BundleQRAccessLog[]
+  grading_results    GradingResult[]
+
+  @@unique([batch_id, grade])
+  @@index([qr_token])
+  @@index([batch_id])
+}
+
+model BundleQRAccessLog {
+  id          String           @id @default(uuid())
+  bundle_id   String
+  device_type String?
+  ip_address  String?
+  user_agent  String?
+  accessed_at DateTime         @default(now())
+  bundle      BatchGradeBundle @relation(fields: [bundle_id], references: [id])
+
+  @@index([bundle_id])
+}
+
+model Notification {
+  id          String         @id @default(uuid())
+  batch_id    String?
+  grading_id  String?
+  user_id     String?
+  channel     NotifChannel
+  message     String
+  status      NotifStatus    @default(PENDING)
+  error_msg   String?
+  retry_count Int            @default(0)
+  sent_at     DateTime?
+  createdAt   DateTime       @default(now())
+  batch       Batch?         @relation(fields: [batch_id], references: [id])
+  grading     GradingResult? @relation(fields: [grading_id], references: [id])
+  user        User?          @relation(fields: [user_id], references: [id])
+}
 
 enum UserRole {
   ADMIN
@@ -59,245 +234,4 @@ enum NotifStatus {
   PENDING
   SENT
   FAILED
-}
-
-// ─────────────────────────────────────────
-// USER
-// ─────────────────────────────────────────
-
-model User {
-  id            String    @id @default(uuid())
-  name          String
-  email         String    @unique
-  password_hash String
-  role          UserRole  @default(QC)
-  phone         String?
-  is_active     Boolean   @default(true)
-  last_login_at DateTime?
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
-
-  batches_created  Batch[]            @relation("BatchCreatedBy")
-  gradings         GradingResult[]
-  printed_bundles  BatchGradeBundle[]
-  notifications    Notification[]
-}
-
-// ─────────────────────────────────────────
-// FARMER
-// ─────────────────────────────────────────
-
-model Farmer {
-  id          String   @id @default(uuid())
-  farmer_code String   @unique
-  name        String
-  phone       String?
-  address     String?
-  village     String?
-  district    String?
-  city        String?
-  is_active   Boolean  @default(true)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-
-  lands   Land[]
-  batches Batch[]
-}
-
-// ─────────────────────────────────────────
-// LAND
-// ─────────────────────────────────────────
-
-model Land {
-  id         String   @id @default(uuid())
-  farmer_id  String
-  land_code  String   @unique
-  land_name  String?
-  latitude   Float?
-  longitude  Float?
-  location   String?
-  area_size  Float?
-  fruit_type String?
-  is_active  Boolean  @default(true)
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
-
-  farmer  Farmer  @relation(fields: [farmer_id], references: [id])
-  batches Batch[]
-}
-
-// ─────────────────────────────────────────
-// BATCH
-// ─────────────────────────────────────────
-
-model Batch {
-  id             String      @id @default(uuid())
-  lot_code       String      @unique
-  farmer_id      String
-  land_id        String
-  fruit_type     String?
-  harvest_date   DateTime?
-  harvest_weight Float?
-  treatment      String?
-  notes          String?
-  status         BatchStatus @default(OPEN)
-
-  // Summary cache — diupdate tiap grading baru masuk
-  total_fruits  Int @default(0)
-  total_grade_a Int @default(0)
-  total_grade_b Int @default(0)
-  total_grade_c Int @default(0)
-  total_reject  Int @default(0)
-
-  created_by_id String?
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
-  closed_at     DateTime?
-
-  farmer        Farmer          @relation(fields: [farmer_id], references: [id])
-  land          Land            @relation(fields: [land_id], references: [id])
-  created_by    User?           @relation("BatchCreatedBy", fields: [created_by_id], references: [id])
-  gradings      GradingResult[]
-  bundles       BatchGradeBundle[]
-  notifications Notification[]
-
-  @@index([farmer_id])
-  @@index([land_id])
-  @@index([status])
-}
-
-// ─────────────────────────────────────────
-// GRADING RESULT
-// ─────────────────────────────────────────
-
-model GradingResult {
-  id            String        @id @default(uuid())
-  batch_id      String
-  bundle_id     String?
-  grading_code  String        @unique
-  grade         Grade?
-  grading_method GradingMethod @default(AI)
-  status        GradingStatus @default(DONE)
-  error_message String?
-
-  // Hasil AI
-  confidence_avg  Float?
-  total_detected  Int?
-  ai_result       Json?
-  consistency     String?
-  confidence      Float?
-  defect_detected Boolean?
-  expiry_prediction Int?
-
-  // Skor visual
-  color_score    Float?
-  texture_score  Float?
-  defect_score   Float?
-  size_score     Float?
-  weight_estimate Float?
-
-  // Metadata AI
-  ml_model_used    String?
-  ml_model_version String?
-
-  // Foto
-  image_urls String[]
-
-  graded_by_id String?
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
-
-  batch         Batch             @relation(fields: [batch_id], references: [id])
-  bundle        BatchGradeBundle? @relation(fields: [bundle_id], references: [id])
-  graded_by     User?             @relation(fields: [graded_by_id], references: [id])
-  notifications Notification[]
-
-  @@index([batch_id])
-  @@index([bundle_id])
-  @@index([grade])
-}
-
-// ─────────────────────────────────────────
-// BATCH GRADE BUNDLE (keranjang per grade)
-// ─────────────────────────────────────────
-
-model BatchGradeBundle {
-  id    String @id @default(uuid())
-  batch_id String
-  grade    Grade
-
-  // Agregasi
-  total_fruits Int    @default(0)
-  total_weight Float?
-
-  // Cache info publik untuk QR page (snapshot saat batch closed)
-  fruit_type     String?
-  harvest_date   DateTime?
-  farmer_name    String?
-  origin_village String?
-  origin_city    String?
-  sorted_at      DateTime?
-
-  // QR & Print
-  qr_token           String      @unique
-  qr_image_path      String? 
-  qr_url             String?
-  qr_is_active       Boolean     @default(true)
-  deactivated_at     DateTime?
-  deactivated_reason String?
-  print_status       PrintStatus @default(NOT_PRINTED)
-  printed_at         DateTime?
-  printed_by_id      String?
-  print_count        Int         @default(0)
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  batch           Batch               @relation(fields: [batch_id], references: [id])
-  printed_by      User?               @relation(fields: [printed_by_id], references: [id])
-  grading_results GradingResult[]
-  qr_logs         BundleQRAccessLog[]
-
-  @@unique([batch_id, grade])
-  @@index([qr_token])
-  @@index([batch_id])
-}
-
-// ─────────────────────────────────────────
-// BUNDLE QR ACCESS LOG
-// ─────────────────────────────────────────
-
-model BundleQRAccessLog {
-  id          String   @id @default(uuid())
-  bundle_id   String
-  device_type String?
-  ip_address  String?
-  user_agent  String?
-  accessed_at DateTime @default(now())
-
-  bundle BatchGradeBundle @relation(fields: [bundle_id], references: [id])
-
-  @@index([bundle_id])
-}
-
-// ─────────────────────────────────────────
-// NOTIFICATION
-// ─────────────────────────────────────────
-
-model Notification {
-  id          String       @id @default(uuid())
-  batch_id    String?
-  grading_id  String?
-  user_id     String?
-  channel     NotifChannel
-  message     String
-  status      NotifStatus  @default(PENDING)
-  error_msg   String?
-  retry_count Int          @default(0)
-  sent_at     DateTime?
-  createdAt   DateTime     @default(now())
-
-  batch   Batch?         @relation(fields: [batch_id], references: [id])
-  grading GradingResult? @relation(fields: [grading_id], references: [id])
-  user    User?          @relation(fields: [user_id], references: [id])
 }

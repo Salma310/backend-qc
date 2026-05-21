@@ -15,9 +15,8 @@ export const generateQRToken = () => {
  * Generate QR public URL dari token
  */
 export const generateQRUrl = (token) => {
-  return `${BASE_URL}/qr/${token}`;
-};
-
+  return `${process.env.PUBLIC_BASE_URL}/qr/${token}`
+}
 /**
  * Generate QR code sebagai base64 PNG
  * Bisa langsung ditampilkan di <img src="..."> atau dikirim ke frontend

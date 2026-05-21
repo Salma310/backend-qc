@@ -19,6 +19,17 @@ import { getQRResultPage } from "./controllers/qr.controller.js";
 
 const app = express();
 
+app.use(cors({
+  origin: [
+    'http://localhost:5173',
+    'http://localhost:3000',
+    'http://192.168.11.171:5173',  // ← tambahkan ini
+    'http://192.168.11.42:3000',  // ← dan ini kalau perlu
+  ],
+  credentials: true,
+}))
+
+
 const upload = multer({ dest: "uploads/" });
 
 const __filename = fileURLToPath(import.meta.url);
@@ -34,7 +45,6 @@ if (!fs.existsSync(qrFolder)) {
 // Static files
 app.use("/uploads", express.static(path.join(__dirname, "../uploads")));
 
-app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 

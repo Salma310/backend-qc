@@ -8,6 +8,7 @@ import {
   generateQRImageToFile,
 } from "../src/lib/qrGenerator.js";
 
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
@@ -83,7 +84,7 @@ export const generateBundlesFromBatch = async (batchId) => {
       } else {
         // Generate QR baru
         qrToken = generateQRToken();
-        qrUrl = generateQRUrl(qrToken);
+        qrUrl = generateQRUrl(qrToken); // ✅ hasilnya: http://192.168.11.161:4000/qr/token
 
         // Simpan file PNG ke uploads/qr/
         const filePath = path.join(QR_FOLDER, `${qrToken}.png`);
