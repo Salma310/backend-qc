@@ -85,7 +85,7 @@ export const getQRImage = async (req, res) => {
 
     res.json({
       grade: bundle.grade,
-      image_url: `${process.env.PUBLIC_BASE_URL}${bundle.qr_image_path}`,
+      image_url: bundle.qr_image_path,
     });
   } catch (error) {
     res.status(500).json({ message: error.message });

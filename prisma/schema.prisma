@@ -213,6 +213,7 @@ enum GradingMethod {
 }
 
 enum GradingStatus {
+  PENDING
   PROCESSING
   DONE
   ERROR

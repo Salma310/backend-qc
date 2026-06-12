@@ -16,6 +16,7 @@ import notificationRoutes from "./routes/notification.routes.js";
 import qrRoutes from "./routes/qr.routes.js";
 import dashboardRoutes from "./routes/dashboard.routes.js";
 import { getQRResultPage } from "./controllers/qr.controller.js";
+import reportRoutes from "./routes/report.routes.js";
 
 const app = express();
 
@@ -23,8 +24,12 @@ app.use(cors({
   origin: [
     'http://localhost:5173',
     'http://localhost:3000',
-    'http://192.168.11.171:5173',  // ← tambahkan ini
-    'http://192.168.11.42:3000',  // ← dan ini kalau perlu
+    'http://localhost:8081',
+    'http://localhost:8082',
+    'http://192.168.11.140:8082',
+    'http://192.168.11.185:5173',  // ← tambahkan ini
+    'http://192.168.11.185:3000',  // ← dan ini kalau perlu
+    'http://192.168.11.140:8081',  // ← dan ini kalau perlu
   ],
   credentials: true,
 }))
@@ -61,5 +66,6 @@ app.use("/api/user", userRoutes);
 app.use("/api/notification", notificationRoutes);
 app.use("/api/qr", qrRoutes);
 app.use("/api/dashboard", dashboardRoutes);
+app.use("/api/reports", reportRoutes);
 
 export default app;

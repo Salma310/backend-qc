@@ -34,186 +34,485 @@ export const getAllGrading = async (req, res) => {
   }
 }
 
-/**
- * CREATE GRADING
- */
+
 export const createGrading = async (req, res) => {
   try {
-    const { batch_id, grade: manualGrade, grading_method } = req.body
- 
-    // ── Validasi batch ────────────────────────────────────────────
-    const batch = await prisma.batch.findUnique({ where: { id: batch_id } })
-    if (!batch)
-      return res.status(404).json({ error: 'Batch tidak ditemukan' })
-    if (batch.status !== 'OPEN')
-      return res.status(400).json({ error: 'Batch sudah ditutup' })
- 
-    // ── Rename & simpan foto ──────────────────────────────────────
-    const grading_code  = await generateGradingCode(batch_id)
-    const qr_token      = `${grading_code}-${nanoid(6)}`
+    const {
+      batch_id,
+      grade: manualGrade,
+      grading_method
+    } = req.body
+
+    // ─────────────────────────────────────────────
+    // Validasi batch
+    // ─────────────────────────────────────────────
+    const batch = await prisma.batch.findUnique({
+      where: { id: batch_id }
+    })
+
+    if (!batch) {
+      return res.status(404).json({
+        error: 'Batch tidak ditemukan'
+      })
+    }
+
+    if (batch.status !== 'OPEN') {
+      return res.status(400).json({
+        error: 'Batch sudah ditutup'
+      })
+    }
+
+    // ─────────────────────────────────────────────
+    // Validasi upload foto
+    // ─────────────────────────────────────────────
     const uploadedFiles = req.files?.images || []
-    const dateStr       = new Date().toISOString().split('T')[0].replace(/-/g, '')
- 
+
+    if (uploadedFiles.length !== 2) {
+      return res.status(400).json({
+        error: 'Harus upload tepat 2 foto (depan dan belakang)'
+      })
+    }
+
+    // ─────────────────────────────────────────────
+    // Generate kode grading
+    // ─────────────────────────────────────────────
+    const grading_code = await generateGradingCode(batch_id)
+
+    const qr_token = `${grading_code}-${nanoid(6)}`
+
+    const dateStr = new Date()
+      .toISOString()
+      .split('T')[0]
+      .replace(/-/g, '')
+
+    // ─────────────────────────────────────────────
+    // Rename file upload
+    // ─────────────────────────────────────────────
     const renamedFiles = uploadedFiles.map((file, index) => {
-      const ext     = path.extname(file.originalname)
-      const newName = `${dateStr}-${grading_code}-${index + 1}${ext}`
+      const ext = path.extname(file.originalname)
+
+      const newName =
+        `${dateStr}-${grading_code}-${index + 1}${ext}`
+
       const newPath = path.join('uploads', newName)
+
       fs.renameSync(file.path, newPath)
+
       return `/uploads/${newName}`
     })
- 
-    // ── Verifikasi semua file benar-benar ada setelah rename ──────
-    // Ini mencegah race condition saat processWithAI langsung jalan
+
+    // ─────────────────────────────────────────────
+    // Verifikasi file hasil rename
+    // ─────────────────────────────────────────────
     for (const filePath of renamedFiles) {
       const fullPath = path.join(process.cwd(), filePath)
+
       if (!fs.existsSync(fullPath)) {
-        console.error(`❌ File tidak ditemukan setelah rename: ${fullPath}`)
-        return res.status(500).json({ error: `File upload gagal: ${filePath}` })
+        console.error(
+          `❌ File tidak ditemukan setelah rename: ${fullPath}`
+        )
+
+        return res.status(500).json({
+          error: `File upload gagal: ${filePath}`
+        })
       }
     }
- 
-    // ── Tentukan mode grading ─────────────────────────────────────
+
+    // ─────────────────────────────────────────────
+    // Tentukan mode grading
+    // ─────────────────────────────────────────────
     const isAI = grading_method !== 'MANUAL'
- 
-    // ── Buat record DB awal ───────────────────────────────────────
+
+    // ─────────────────────────────────────────────
+    // Simpan record awal
+    // ─────────────────────────────────────────────
     const result = await prisma.gradingResult.create({
       data: {
         grading_code,
-        image_urls:     renamedFiles,
+        image_urls: renamedFiles,
         grading_method: isAI ? 'AI' : 'MANUAL',
-        status:         isAI ? 'PROCESSING' : 'DONE',
-        grade:          isAI ? null : manualGrade,
+
+        // AI mulai dari PENDING
+        status: isAI ? 'PENDING' : 'DONE',
+
+        grade: isAI ? null : manualGrade,
+
         batch: {
-          connect: { id: batch_id }
+          connect: {
+            id: batch_id
+          }
         }
-      },
+      }
     })
- 
-    console.log(`✅ Grading record dibuat: ${grading_code} | status: ${result.status}`)
- 
-    // ── MANUAL: langsung selesai ──────────────────────────────────
+
+    console.log(
+      `✅ Grading record dibuat: ${grading_code} | status: ${result.status}`
+    )
+
+    // ─────────────────────────────────────────────
+    // Manual grading
+    // ─────────────────────────────────────────────
     if (!isAI) {
-      await updateBatchSummary(batch_id, manualGrade)
+      await updateBatchSummary(
+        batch_id,
+        manualGrade
+      )
+
       return res.status(201).json(result)
     }
- 
-    // ── AI: return 202 langsung, proses background ────────────────
+
+    // ─────────────────────────────────────────────
+    // AI grading
+    // Return langsung ke client
+    // ─────────────────────────────────────────────
     res.status(202).json({
-      message:      'Sedang diproses AI',
-      grading_id:   result.id,
+      message: 'Sedang diproses AI',
+      grading_id: result.id,
       grading_code: result.grading_code,
-      status:       'PROCESSING',
+
+      // gunakan status DB yang sebenarnya
+      status: result.status
     })
- 
-    // Sedikit delay kecil untuk memastikan response sudah terkirim
-    // sebelum background process mulai (opsional tapi membantu di Windows)
+
+    // ─────────────────────────────────────────────
+    // Background processing
+    // ─────────────────────────────────────────────
     setImmediate(() => {
-      processWithAI(result.id, batch_id, renamedFiles).catch(err => {
-        console.error(`❌ processWithAI unhandled error [${grading_code}]:`, err)
+      processWithAI(
+        result.id,
+        batch_id,
+        renamedFiles
+      ).catch(err => {
+        console.error(
+          `❌ processWithAI unhandled error [${grading_code}]`,
+          err
+        )
       })
     })
- 
+
   } catch (error) {
-    console.error('createGrading error:', error)
-    res.status(500).json({ message: error.message })
+    console.error(
+      '❌ createGrading error:',
+      error
+    )
+
+    res.status(500).json({
+      message: error.message
+    })
   }
 }
- 
- 
+
 /**
  * Background worker: kirim foto ke Python, update DB
  */
 async function processWithAI(gradingId, batchId, fileUrls) {
   console.log(`\n🤖 processWithAI START [${gradingId}]`)
   console.log(`   Files: ${fileUrls.join(', ')}`)
- 
+
   try {
-    // ── Verifikasi file ada sebelum kirim ke Python ───────────────
+
+    await prisma.gradingResult.update({
+      where: { id: gradingId },
+      data: {
+        status: 'PROCESSING'
+      }
+    })
+
     const aiForm = new FormData()
+
     for (const filePath of fileUrls) {
       const fullPath = path.join(process.cwd(), filePath)
- 
-      // Cek file benar-benar ada dan bisa dibaca
+
       if (!fs.existsSync(fullPath)) {
         throw new Error(`File tidak ditemukan: ${fullPath}`)
       }
- 
+
       const stat = fs.statSync(fullPath)
+
       if (stat.size === 0) {
         throw new Error(`File kosong (0 bytes): ${fullPath}`)
       }
- 
-      console.log(`   📎 Append file: ${path.basename(fullPath)} (${stat.size} bytes)`)
-      aiForm.append('images', fs.createReadStream(fullPath), path.basename(fullPath))
+
+      console.log(
+        `   📎 Append file: ${path.basename(fullPath)} (${stat.size} bytes)`
+      )
+
+      aiForm.append(
+        'images',
+        fs.createReadStream(fullPath),
+        path.basename(fullPath)
+      )
     }
- 
-    console.log(`   🚀 Mengirim ${fileUrls.length} foto ke Python...`)
- 
-    // ── Panggil Python AI service ─────────────────────────────────
+
+    console.log(
+      `   🚀 Mengirim ${fileUrls.length} foto ke Python...`
+    )
+
     const aiRes = await fetch(`${AI_SERVICE_URL}/grade`, {
-      method:  'POST',
-      body:    aiForm,
+      method: 'POST',
+      body: aiForm,
       headers: aiForm.getHeaders(),
-      // Timeout 60 detik — cukup untuk proses YOLO + CNN
-      signal:  AbortSignal.timeout(60000),
     })
- 
+
     if (!aiRes.ok) {
       const errText = await aiRes.text()
-      throw new Error(`Python API error ${aiRes.status}: ${errText}`)
+
+      throw new Error(
+        `Python API error ${aiRes.status}: ${errText}`
+      )
     }
- 
+
     const aiData = await aiRes.json()
-    console.log(`   📊 Python response:`, JSON.stringify(aiData).slice(0, 200))
- 
-    // ── Gagal dari Python → update ERROR ─────────────────────────
+
+    console.log(
+      `   📊 Python response:`,
+      JSON.stringify(aiData).slice(0, 200)
+    )
+
     if (!aiData.success) {
-      console.warn(`   ⚠ Python: ${aiData.error_code} — ${aiData.message}`)
       await prisma.gradingResult.update({
         where: { id: gradingId },
         data: {
-          status:        'ERROR',
-          ai_result:     aiData,
-          error_message: aiData.message || 'Jambu tidak terdeteksi',
+          status: 'ERROR',
+          ai_result: aiData,
+          error_message:
+            aiData.message ||
+            'Jambu tidak terdeteksi',
         },
       })
+
       return
     }
- 
-    // ── Sukses → update record ────────────────────────────────────
+
     await prisma.gradingResult.update({
       where: { id: gradingId },
       data: {
-        status:          'DONE',
-        grade:           aiData.grade,
-        confidence:      aiData.confidence_avg,
-        confidence_avg:  aiData.confidence_avg,
-        total_detected:  aiData.total_detected,
-        consistency:     aiData.consistency,
+        status: 'DONE',
+        grade: aiData.grade,
+        confidence: aiData.confidence_avg,
+        confidence_avg: aiData.confidence_avg,
+        total_detected: aiData.total_detected,
+        consistency: aiData.consistency,
         defect_detected: aiData.defect_detected,
-        ai_result:       aiData.ai_result,
+        ai_result: aiData.ai_result,
       },
     })
- 
-    await updateBatchSummary(batchId, aiData.grade)
-    console.log(`   ✅ processWithAI DONE [${gradingId}] → grade ${aiData.grade}`)
- 
+
+    await updateBatchSummary(
+      batchId,
+      aiData.grade
+    )
+
+    console.log(
+      `   ✅ processWithAI DONE [${gradingId}]`
+    )
+
   } catch (err) {
-    console.error(`   ❌ processWithAI FAILED [${gradingId}]:`, err.message)
-    console.error(err.stack)
- 
-    // Update DB ke ERROR dengan pesan yang jelas
+
+    console.error(
+      `   ❌ processWithAI FAILED [${gradingId}]`,
+      err
+    )
+
     await prisma.gradingResult.update({
       where: { id: gradingId },
       data: {
-        status:        'ERROR',
+        status: 'ERROR',
         error_message: err.message,
       },
     }).catch(dbErr => {
-      console.error(`   ❌ Gagal update status ERROR ke DB:`, dbErr.message)
+      console.error(
+        '❌ Gagal update ERROR:',
+        dbErr
+      )
     })
   }
 }
+// /**
+//  * CREATE GRADING
+//  */
+// export const createGrading = async (req, res) => {
+//   try {
+//     const { batch_id, grade: manualGrade, grading_method } = req.body
+ 
+//     // ── Validasi batch ────────────────────────────────────────────
+//     const batch = await prisma.batch.findUnique({ where: { id: batch_id } })
+//     if (!batch)
+//       return res.status(404).json({ error: 'Batch tidak ditemukan' })
+//     if (batch.status !== 'OPEN')
+//       return res.status(400).json({ error: 'Batch sudah ditutup' })
+ 
+//     // ── Rename & simpan foto ──────────────────────────────────────
+//     const grading_code  = await generateGradingCode(batch_id)
+//     const qr_token      = `${grading_code}-${nanoid(6)}`
+//     const uploadedFiles = req.files?.images || []
+//     if (uploadedFiles.length !== 2) {
+//       return res.status(400).json({
+//         error: 'Harus upload 2 foto (depan dan belakang)'
+//       })
+//     }
+//     const dateStr       = new Date().toISOString().split('T')[0].replace(/-/g, '')
+ 
+//     const renamedFiles = uploadedFiles.map((file, index) => {
+//       const ext     = path.extname(file.originalname)
+//       const newName = `${dateStr}-${grading_code}-${index + 1}${ext}`
+//       const newPath = path.join('uploads', newName)
+//       fs.renameSync(file.path, newPath)
+//       return `/uploads/${newName}`
+//     })
+ 
+//     // ── Verifikasi semua file benar-benar ada setelah rename ──────
+//     // Ini mencegah race condition saat processWithAI langsung jalan
+//     for (const filePath of renamedFiles) {
+//       const fullPath = path.join(process.cwd(), filePath)
+//       if (!fs.existsSync(fullPath)) {
+//         console.error(`❌ File tidak ditemukan setelah rename: ${fullPath}`)
+//         return res.status(500).json({ error: `File upload gagal: ${filePath}` })
+//       }
+//     }
+ 
+//     // ── Tentukan mode grading ─────────────────────────────────────
+//     const isAI = grading_method !== 'MANUAL'
+ 
+//     // ── Buat record DB awal ───────────────────────────────────────
+//     const result = await prisma.gradingResult.create({
+//       data: {
+//         grading_code,
+//         image_urls:     renamedFiles,
+//         grading_method: isAI ? 'AI' : 'MANUAL',
+//         status:         isAI ? 'PENDING' : 'DONE',
+//         grade:          isAI ? null : manualGrade,
+//         batch: {
+//           connect: { id: batch_id }
+//         }
+//       },
+//     })
+ 
+//     console.log(`✅ Grading record dibuat: ${grading_code} | status: ${result.status}`)
+ 
+//     // ── MANUAL: langsung selesai ──────────────────────────────────
+//     if (!isAI) {
+//       await updateBatchSummary(batch_id, manualGrade)
+//       return res.status(201).json(result)
+//     }
+ 
+//     // ── AI: return 202 langsung, proses background ────────────────
+//     res.status(202).json({
+//       message:      'Sedang diproses AI',
+//       grading_id:   result.id,
+//       grading_code: result.grading_code,
+//       status:       'PROCESSING',
+//     })
+ 
+//     // Sedikit delay kecil untuk memastikan response sudah terkirim
+//     // sebelum background process mulai (opsional tapi membantu di Windows)
+//     setImmediate(() => {
+//       processWithAI(result.id, batch_id, renamedFiles).catch(err => {
+//         console.error(`❌ processWithAI unhandled error [${grading_code}]:`, err)
+//       })
+//     })
+ 
+//   } catch (error) {
+//     console.error('createGrading error:', error)
+//     res.status(500).json({ message: error.message })
+//   }
+// }
+ 
+ 
+// /**
+//  * Background worker: kirim foto ke Python, update DB
+//  */
+// async function processWithAI(gradingId, batchId, fileUrls) {
+//   console.log(`\n🤖 processWithAI START [${gradingId}]`)
+//   console.log(`   Files: ${fileUrls.join(', ')}`)
+ 
+//   try {
+//     // ── Verifikasi file ada sebelum kirim ke Python ───────────────
+//     const aiForm = new FormData()
+//     for (const filePath of fileUrls) {
+//       const fullPath = path.join(process.cwd(), filePath)
+ 
+//       // Cek file benar-benar ada dan bisa dibaca
+//       if (!fs.existsSync(fullPath)) {
+//         throw new Error(`File tidak ditemukan: ${fullPath}`)
+//       }
+ 
+//       const stat = fs.statSync(fullPath)
+//       if (stat.size === 0) {
+//         throw new Error(`File kosong (0 bytes): ${fullPath}`)
+//       }
+ 
+//       console.log(`   📎 Append file: ${path.basename(fullPath)} (${stat.size} bytes)`)
+//       aiForm.append('images', fs.createReadStream(fullPath), path.basename(fullPath))
+//     }
+ 
+//     console.log(`   🚀 Mengirim ${fileUrls.length} foto ke Python...`)
+ 
+//     // ── Panggil Python AI service ─────────────────────────────────
+//     const aiRes = await fetch(`${AI_SERVICE_URL}/grade`, {
+//       method:  'POST',
+//       body:    aiForm,
+//       headers: aiForm.getHeaders(),
+//       // Timeout 60 detik — cukup untuk proses YOLO + CNN
+//       // signal:  AbortSignal.timeout(60000),
+//     })
+ 
+//     if (!aiRes.ok) {
+//       const errText = await aiRes.text()
+//       throw new Error(`Python API error ${aiRes.status}: ${errText}`)
+//     }
+ 
+//     const aiData = await aiRes.json()
+//     console.log(`   📊 Python response:`, JSON.stringify(aiData).slice(0, 200))
+ 
+//     // ── Gagal dari Python → update ERROR ─────────────────────────
+//     if (!aiData.success) {
+//       console.warn(`   ⚠ Python: ${aiData.error_code} — ${aiData.message}`)
+//       await prisma.gradingResult.update({
+//         where: { id: gradingId },
+//         data: {
+//           status:        'ERROR',
+//           ai_result:     aiData,
+//           error_message: aiData.message || 'Jambu tidak terdeteksi',
+//         },
+//       })
+//       return
+//     }
+ 
+//     // ── Sukses → update record ────────────────────────────────────
+//     await prisma.gradingResult.update({
+//       where: { id: gradingId },
+//       data: {
+//         status:          'DONE',
+//         grade:           aiData.grade,
+//         confidence:      aiData.confidence_avg,
+//         confidence_avg:  aiData.confidence_avg,
+//         total_detected:  aiData.total_detected,
+//         consistency:     aiData.consistency,
+//         defect_detected: aiData.defect_detected,
+//         ai_result:       aiData.ai_result,
+//       },
+//     })
+ 
+//     await updateBatchSummary(batchId, aiData.grade)
+//     console.log(`   ✅ processWithAI DONE [${gradingId}] → grade ${aiData.grade}`)
+ 
+//   } catch (err) {
+//     console.error(`   ❌ processWithAI FAILED [${gradingId}]:`, err.message)
+//     console.error(err.stack)
+ 
+//     // Update DB ke ERROR dengan pesan yang jelas
+//     await prisma.gradingResult.update({
+//       where: { id: gradingId },
+//       data: {
+//         status:        'ERROR',
+//         error_message: err.message,
+//       },
+//     }).catch(dbErr => {
+//       console.error(`   ❌ Gagal update status ERROR ke DB:`, dbErr.message)
+//     })
+//   }
+// }
  
  
 /**

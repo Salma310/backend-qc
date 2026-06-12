@@ -1,6 +1,7 @@
 import { prisma } from "../lib/prisma.js";
 import { generateBatchCode } from "../utils/codeGenerator.js";
 import { generateBundlesFromBatch, getBundlesByBatch } from "../../services/bundleService.js";
+import { sendBatchClosedNotification } from "../../services/n8nService.js";
 
 /**
  * GET ALL BATCH
@@ -164,6 +165,29 @@ export const closeBatch = async (req, res) => {
 
     // 3. Generate bundle per grade
     const bundles = await generateBundlesFromBatch(id);
+
+    // 4. Ambil data lengkap batch untuk report
+    const batch = await prisma.batch.findUnique({
+      where: { id },
+      include: {
+        farmer: true,
+        land: true,
+
+        gradings: {
+          select: {
+            confidence: true,
+          },
+        },
+
+        bundles: true,
+      },
+    });
+
+    try {
+      await sendBatchClosedNotification(batch);
+    } catch (err) {
+      console.error("N8N ERROR:", err.message);
+    }
 
     res.json({
       message: "Batch berhasil di-close dan bundle berhasil dibuat",
