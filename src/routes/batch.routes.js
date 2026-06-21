@@ -1,4 +1,5 @@
-import express from "express";
+﻿import express from "express";
+import { authenticate } from "../middlewares/auth.middleware.js";
 import {
   getAllBatch,
   getBatchById,
@@ -13,19 +14,20 @@ import {
 
 const router = express.Router();
 
-// ── Static routes dulu (urutan penting!) ──
+// Static routes dulu (urutan penting!)
 router.get("/", getAllBatch);
 router.get("/active", getActiveBatch);
-router.get("/bundles", getAllBundles);      // ← harus sebelum /:id
+router.get("/bundles", getAllBundles); // harus sebelum /:id
 
-// ── Dynamic routes ──
+// Dynamic routes
 router.get("/:id", getBatchById);
 router.get("/:id/bundles", getBatchBundles);
 
-// ── Mutasi ──
-router.post("/", createBatch);
+// Mutasi
+router.post("/", authenticate, createBatch);
 router.put("/:id", updateBatch);
 router.patch("/:id/close", closeBatch);
 router.delete("/:id", deleteBatch);
 
 export default router;
+

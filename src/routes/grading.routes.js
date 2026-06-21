@@ -1,6 +1,7 @@
-import express from "express";
+﻿import express from "express";
 import multer from "multer";
 import path from "path";
+import { authenticate } from "../middlewares/auth.middleware.js";
 
 import {
   getAllGrading,
@@ -14,7 +15,7 @@ import {
 const router = express.Router();
 
 
-// 🔥 CUSTOM STORAGE
+// Custom storage
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
     cb(null, "uploads/");
@@ -51,7 +52,7 @@ router.get("/", getAllGrading);
 router.get("/:id", getGradingById);
 
 router.get('/:id/status',        getGradingStatus)
-router.post("/", gradingUpload, createGrading);
+router.post("/", authenticate, gradingUpload, createGrading);
 
 router.put('/:id',               updateGrading)
 router.delete('/:id',            deleteGrading)

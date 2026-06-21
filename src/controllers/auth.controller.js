@@ -83,7 +83,7 @@ export const register = async (req, res) => {
 // ─────────────────────────────────────────
 export const login = async (req, res) => {
   try {
-    const { email, password } = req.body;
+    const { email, password, client } = req.body;
 
     if (!email || !password) {
       return res.status(400).json({ message: "Email and password are required." });
@@ -97,6 +97,10 @@ export const login = async (req, res) => {
 
     if (!user.is_active) {
       return res.status(403).json({ message: "Account is deactivated. Contact admin." });
+    }
+
+    if (client === 'web' && !['ADMIN', 'MANAGER'].includes(user.role)) {
+      return res.status(403).json({ message: "Akses login web hanya untuk role ADMIN dan MANAGER." });
     }
 
     const isMatch = await bcrypt.compare(password, user.password_hash);

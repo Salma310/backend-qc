@@ -1,4 +1,4 @@
-import { prisma } from "../lib/prisma.js";
+﻿import { prisma } from "../lib/prisma.js";
 import { generateBatchCode } from "../utils/codeGenerator.js";
 import { generateBundlesFromBatch, getBundlesByBatch } from "../../services/bundleService.js";
 import { sendBatchClosedNotification } from "../../services/n8nService.js";
@@ -66,6 +66,11 @@ export const createBatch = async (req, res) => {
       notes,
       created_by_id,
     } = req.body;
+    const creatorId = req.user?.id ?? req.body.created_by_id ?? null;
+
+    if (!creatorId) {
+      return res.status(401).json({ message: "User tidak terautentikasi." });
+    }
 
     const lot_code = await generateBatchCode(land_id);
 
@@ -79,7 +84,10 @@ export const createBatch = async (req, res) => {
         harvest_weight,
         treatment,
         notes,
-        created_by_id,
+        created_by_id: creatorId,
+      },
+      include: {
+        created_by: true,
       },
     });
 
@@ -132,7 +140,7 @@ export const deleteBatch = async (req, res) => {
  * CLOSE BATCH + GENERATE BUNDLE PER GRADE
  *
  * Flow:
- * 1. Update status batch → CLOSED
+ * 1. Update status batch  CLOSED
  * 2. Sortir semua GradingResult berdasarkan grade
  * 3. Generate BatchGradeBundle + QR token untuk tiap grade
  *
@@ -209,7 +217,7 @@ export const closeBatch = async (req, res) => {
 
 /**
  * GET BUNDLE BY BATCH ID
- * Untuk dashboard internal — melihat semua keranjang + detail per buah
+ * Untuk dashboard internal  melihat semua keranjang + detail per buah
  */
 export const getBatchBundles = async (req, res) => {
   try {
@@ -260,3 +268,4 @@ export const getActiveBatch = async (req, res) => {
     res.status(500).json({ message: error.message });
   }
 };
+
