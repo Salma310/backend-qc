@@ -3,7 +3,8 @@ import { prisma } from "../src/lib/prisma.js";
 
 const N8N_WEBHOOK_URL =
   process.env.N8N_WEBHOOK_URL ||
-  "http://localhost:5678/webhook/qc-alert";
+  "http://192.168.60.24:5678/webhook/qc-alert";
+    // "http://localhost:5678/webhook/qc-alert";
 
 export const sendBatchClosedNotification = async (batch) => {
   try {
