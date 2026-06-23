@@ -6,7 +6,7 @@ import {
   generateQRToken,
   generateQRUrl,
   generateQRImageToFile,
-} from "../src/lib/qrGenerator.js";
+} from "../src/lib/QrGenerator.js";
 
 
 const __filename = fileURLToPath(import.meta.url);

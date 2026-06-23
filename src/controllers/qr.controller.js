@@ -81,11 +81,11 @@ export const getQRImage = async (req, res) => {
       return res.status(404).json({ message: "File QR belum di-generate" });
     }
 
-    const imageUrl = `${process.env.PUBLIC_BASE_URL}${bundle.qr_image_path}`;
+    const imageUrl = `${process.env.PUBLIC_BASE_URL || 'http://localhost:3000'}${bundle.qr_image_path}`;
 
     res.json({
       grade: bundle.grade,
-      image_url: bundle.qr_image_path,
+      image_url: imageUrl,
     });
   } catch (error) {
     res.status(500).json({ message: error.message });

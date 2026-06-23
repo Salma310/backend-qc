@@ -30,6 +30,7 @@ app.use(cors({
     'http://192.168.11.185:5173',  // ← tambahkan ini
     'http://192.168.11.185:3000',  // ← dan ini kalau perlu
     'http://192.168.11.140:8081',  // ← dan ini kalau perlu
+    'http://labai.polinema.ac.id:3100', // ← URL publik server
   ],
   credentials: true,
 }))
