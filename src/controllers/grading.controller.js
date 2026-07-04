@@ -60,12 +60,19 @@ export const createGrading = async (req, res) => {
       })
     }
 
+    const MAX_IMAGES = 10 
     // Validasi upload foto
     const uploadedFiles = req.files?.images || []
 
-    if (uploadedFiles.length !== 2) {
+    if (uploadedFiles.length < 2) {
       return res.status(400).json({
-        error: 'Harus upload tepat 2 foto (depan dan belakang)'
+        error: 'Minimal upload 2 foto jambu'
+      })
+    }
+
+    if (uploadedFiles.length > MAX_IMAGES) {
+      return res.status(400).json({
+        error: `Maksimal ${MAX_IMAGES} foto per request`
       })
     }
 
