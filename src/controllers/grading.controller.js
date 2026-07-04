@@ -536,13 +536,27 @@ export const getGradingStatus = async (req, res) => {
         error_message:   true,
         ai_result:       true,
         graded_by_id:     true,
+        createdAt:       true,
+        updatedAt:       true,
         graded_by: {
           select: { id: true, name: true, role: true }
         },
       },
     })
     if (!grading) return res.status(404).json({ error: 'Not found' })
-    res.json(grading)
+
+    // Hitung waktu pemrosesan background AI secara dinamis (selisih updatedAt - createdAt)
+    let processing_time_ms = 0;
+    if (grading.status === 'DONE' || grading.status === 'ERROR') {
+      const start = new Date(grading.createdAt).getTime();
+      const end = new Date(grading.updatedAt).getTime();
+      processing_time_ms = Math.max(0, end - start);
+    }
+
+    res.json({
+      ...grading,
+      processing_time_ms
+    })
   } catch (err) {
     res.status(500).json({ message: err.message })
   }
