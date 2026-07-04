@@ -1,4 +1,4 @@
-﻿import { prisma } from "../lib/prisma.js";
+import { prisma } from "../lib/prisma.js";
 import { generateGradingCode } from "../utils/codeGenerator.js";
 import { nanoid } from "nanoid";
 import fs from "fs";
@@ -113,6 +113,9 @@ export const createGrading = async (req, res) => {
       }
     }
 
+    // Mulai hitung processing time (setelah upload selesai & file terverifikasi)
+    const processingStart = Date.now()
+
     // Tentukan mode grading
     const isAI = grading_method !== 'MANUAL'
     const operatorId = req.user?.id ?? null
@@ -157,11 +160,13 @@ export const createGrading = async (req, res) => {
         manualGrade
       )
 
-      return res.status(201).json(result)
+      const processingTime = Date.now() - processingStart
+      return res.status(201).json({ ...result, processingTime })
     }
 
     // AI grading
     // Return langsung ke client
+    const processingTime = Date.now() - processingStart
     res.status(202).json({
       message: 'Sedang diproses AI',
       grading_id: result.id,
@@ -172,6 +177,7 @@ export const createGrading = async (req, res) => {
       graded_by_id: result.graded_by_id,
       graded_by: result.graded_by,
       data: result,
+      processingTime,
     })
 
     // Background processing
